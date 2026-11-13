@@ -1,0 +1,6 @@
+# Dati personali: NON committare
+seed.sql
+conti-casa-specifica.md
+.env
+*.local.*
+*Zone.Identifier

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>Conti casa</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Caricamento -->
+  <main id="view-loading" class="center"><p>Caricamento…</p></main>
+
+  <!-- Login -->
+  <main id="view-login" class="center" hidden>
+    <form id="form-login" class="card auth" autocomplete="on">
+      <h1>Conti casa</h1>
+      <label for="login-email">Email</label>
+      <input id="login-email" type="email" autocomplete="username" required>
+      <label for="login-pass">Password</label>
+      <input id="login-pass" type="password" autocomplete="current-password" required>
+      <p id="login-msg" class="msg" role="alert"></p>
+      <button class="btn primary" type="submit">Accedi</button>
+      <button class="btn link" type="button" id="btn-forgot">Password dimenticata?</button>
+    </form>
+  </main>
+
+  <!-- Nuova password (dopo il link ricevuto via email) -->
+  <main id="view-recovery" class="center" hidden>
+    <form id="form-recovery" class="card auth">
+      <h1>Nuova password</h1>
+      <label for="rec-pass">Nuova password (min. 8 caratteri)</label>
+      <input id="rec-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <p id="rec-msg" class="msg" role="alert"></p>
+      <button class="btn primary" type="submit">Salva password</button>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="view-app" class="wrap" hidden>
+    <header class="top">
+      <div>
+        <h1>Conti casa</h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <button class="btn" id="btn-logout" type="button">Esci</button>
+    </header>
+
+    <section class="cards" id="cards" aria-label="Riepilogo"></section>
+
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Conti">
+      <button role="tab" data-tab="c1" id="tab-c1"></button>
+      <button role="tab" data-tab="c2" id="tab-c2"></button>
+      <button role="tab" data-tab="comune" id="tab-comune">Conto comune</button>
+    </nav>
+
+    <section class="card scroll" id="monthly" aria-label="Riepilogo mensile"></section>
+
+    <div class="actions">
+      <button class="btn primary" id="btn-add" type="button"></button>
+      <button class="btn" id="btn-start" type="button">Saldi di partenza</button>
+      <button class="btn" id="btn-csv" type="button">Copia CSV</button>
+    </div>
+
+    <section id="list" aria-label="Operazioni"></section>
+  </div>
+
+  <!-- Finestra aggiungi / modifica -->
+  <dialog id="dlg-op">
+    <form id="form-op" novalidate>
+      <h2 id="op-title">Aggiungi</h2>
+      <label for="f-conto">Conto</label>
+      <select id="f-conto">
+        <option value="c1"></option>
+        <option value="c2"></option>
+        <option value="comune">Conto comune (diviso a metà)</option>
+      </select>
+
+      <label for="f-voce">Descrizione</label>
+      <input id="f-voce" type="text" maxlength="120" required>
+
+      <div id="f-tipo-wrap">
+        <label for="f-tipo">Tipo</label>
+        <select id="f-tipo">
+          <option value="uscita">Uscita</option>
+          <option value="entrata">Entrata</option>
+        </select>
+      </div>
+
+      <label for="f-importo">Importo (€)</label>
+      <input id="f-importo" type="text" inputmode="decimal" autocomplete="off" required>
+      <p id="f-preview" class="hint" aria-live="polite"></p>
+
+      <label for="f-data">Data</label>
+      <input id="f-data" type="date" required>
+
+      <label for="f-cat">Categoria</label>
+      <input id="f-cat" type="text" list="cat-list" maxlength="40" autocomplete="off">
+      <datalist id="cat-list"></datalist>
+
+      <p id="op-msg" class="msg" role="alert"></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="op-cancel">Annulla</button>
+        <button class="btn primary" type="submit" id="op-save">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Finestra saldi di partenza -->
+  <dialog id="dlg-start">
+    <form id="form-start" novalidate>
+      <h2>Saldi di partenza</h2>
+      <label for="s-data">Data di partenza</label>
+      <input id="s-data" type="date" required>
+      <label for="s-n1">Nome Conto 1</label>
+      <input id="s-n1" type="text" maxlength="40" required>
+      <label for="s-i1">Saldo iniziale Conto 1 (€)</label>
+      <input id="s-i1" type="text" inputmode="decimal" required>
+      <label for="s-n2">Nome Conto 2</label>
+      <input id="s-n2" type="text" maxlength="40" required>
+      <label for="s-i2">Saldo iniziale Conto 2 (€)</label>
+      <input id="s-i2" type="text" inputmode="decimal" required>
+      <p id="start-msg" class="msg" role="alert"></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="start-cancel">Annulla</button>
+        <button class="btn primary" type="submit" id="start-save">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="calc.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
