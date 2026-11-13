@@ -20,7 +20,10 @@
 
   // ---------- utilità UI ----------
   const views = ["loading", "login", "recovery", "app"];
-  function showView(name) { views.forEach((v) => { $("#view-" + v).hidden = v !== name; }); }
+  function showView(name) {
+    views.forEach((v) => { $("#view-" + v).hidden = v !== name; });
+    document.title = name === "app" ? "Conti casa" : "Accesso";
+  }
   let toastTimer;
   function toast(msg) {
     const t = $("#toast"); t.textContent = msg; t.hidden = false;
@@ -87,13 +90,6 @@
     const msg = $("#login-msg"); msg.textContent = ""; msg.className = "msg";
     const { error } = await sb.auth.signInWithPassword({ email: $("#login-email").value.trim(), password: $("#login-pass").value });
     if (error) msg.textContent = "Email o password non corretti.";
-  });
-  $("#btn-forgot").addEventListener("click", async () => {
-    const msg = $("#login-msg"); const email = $("#login-email").value.trim();
-    if (!email) { msg.className = "msg"; msg.textContent = "Scrivi prima la tua email."; return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-    msg.className = error ? "msg" : "msg ok";
-    msg.textContent = error ? "Invio non riuscito. Riprova tra poco." : "Se l'email è registrata, riceverai un link per cambiare la password.";
   });
   $("#form-recovery").addEventListener("submit", async (e) => {
     e.preventDefault();
