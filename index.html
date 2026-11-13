@@ -47,6 +47,7 @@
       <button class="btn" id="btn-logout" type="button">Esci</button>
     </header>
 
+    <div id="main-view">
     <section class="cards" id="cards" aria-label="Riepilogo"></section>
 
     <nav class="tabs" id="tabs" role="tablist" aria-label="Conti">
@@ -59,11 +60,24 @@
 
     <div class="actions">
       <button class="btn primary" id="btn-add" type="button"></button>
+      <button class="btn" id="btn-rules" type="button">🔁 Ricorrenti</button>
       <button class="btn" id="btn-start" type="button">Saldi di partenza</button>
       <button class="btn" id="btn-csv" type="button">Copia CSV</button>
+      <label class="chk"><input type="checkbox" id="chk-ann"> Mostra annullate</label>
     </div>
 
     <section id="list" aria-label="Operazioni"></section>
+    </div>
+
+    <div id="rules-view" hidden>
+      <div class="rules-head">
+        <button class="btn" id="rules-back" type="button">← Indietro</button>
+        <h2>Operazioni ricorrenti</h2>
+        <button class="btn primary" id="rule-add" type="button">+ Aggiungi</button>
+      </div>
+      <p class="note">Ogni regola crea da sola le operazioni dei prossimi 12 mesi. Ogni operazione creata si può modificare o eliminare singolarmente.</p>
+      <ul class="rows" id="rules-list"></ul>
+    </div>
   </div>
 
   <!-- Finestra aggiungi / modifica -->
@@ -99,10 +113,79 @@
       <input id="f-cat" type="text" list="cat-list" maxlength="40" autocomplete="off">
       <datalist id="cat-list"></datalist>
 
+      <p id="op-hint" class="hint" hidden>Operazione ricorrente: le modifiche valgono solo per questo mese.</p>
+      <button class="btn" type="button" id="op-recur">🔁 Rendi ricorrente</button>
+
       <p id="op-msg" class="msg" role="alert"></p>
       <div class="dlg-actions">
         <button class="btn" type="button" id="op-cancel">Annulla</button>
         <button class="btn primary" type="submit" id="op-save">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Finestra regola ricorrente -->
+  <dialog id="dlg-rule">
+    <form id="form-rule" novalidate>
+      <h2 id="rule-title">Nuova ricorrenza</h2>
+      <label for="r-conto">Conto</label>
+      <select id="r-conto">
+        <option value="c1"></option>
+        <option value="c2"></option>
+        <option value="comune">Conto comune (diviso a metà)</option>
+      </select>
+
+      <label for="r-voce">Descrizione</label>
+      <input id="r-voce" type="text" maxlength="120" required>
+
+      <div id="r-tipo-wrap">
+        <label for="r-tipo">Tipo</label>
+        <select id="r-tipo">
+          <option value="uscita">Uscita</option>
+          <option value="entrata">Entrata</option>
+        </select>
+      </div>
+
+      <label for="r-importo">Importo (€)</label>
+      <input id="r-importo" type="text" inputmode="decimal" autocomplete="off" required>
+
+      <label for="r-cat">Categoria</label>
+      <input id="r-cat" type="text" list="cat-list" maxlength="40" autocomplete="off">
+
+      <label for="r-freq">Ogni quanti mesi</label>
+      <select id="r-freq">
+        <option value="1">Ogni mese</option>
+        <option value="2">Ogni 2 mesi (bimestrale)</option>
+        <option value="3">Ogni 3 mesi (trimestrale)</option>
+        <option value="6">Ogni 6 mesi (semestrale)</option>
+        <option value="12">Ogni anno</option>
+        <option value="altro">Altro numero…</option>
+      </select>
+      <input id="r-ogni" type="number" min="1" max="24" step="1" inputmode="numeric" aria-label="Numero di mesi (1-24)" hidden>
+
+      <label for="r-giorno">Giorno del mese (1-31)</label>
+      <input id="r-giorno" type="number" min="1" max="31" step="1" inputmode="numeric" required>
+
+      <label for="r-inizio">Data inizio</label>
+      <input id="r-inizio" type="date" required>
+
+      <label for="r-fine">Data fine (facoltativa)</label>
+      <input id="r-fine" type="date">
+
+      <p id="r-preview" class="hint" aria-live="polite"></p>
+      <p id="rule-msg" class="msg" role="alert"></p>
+
+      <div id="rule-actions" class="dlg-actions">
+        <button class="btn" type="button" id="rule-cancel">Annulla</button>
+        <button class="btn primary" type="submit" id="rule-save">Salva</button>
+      </div>
+      <div id="rule-ask" hidden>
+        <p class="confirm">Applicare le modifiche anche alle operazioni future già create (quelle non modificate a mano)?</p>
+        <div class="dlg-actions">
+          <button class="btn" type="button" id="ask-back">Indietro</button>
+          <button class="btn" type="button" id="ask-no">No, solo la regola</button>
+          <button class="btn primary" type="button" id="ask-yes">Sì, applica</button>
+        </div>
       </div>
     </form>
   </dialog>

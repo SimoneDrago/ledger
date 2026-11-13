@@ -111,3 +111,20 @@ dialog::backdrop { background: rgba(0, 0, 0, .5); }
   .cards .sum .t { grid-column: 1; } .cards .sum .big { grid-column: 2; grid-row: 1 / 3; margin: 0; }
   .cards .sum .s { grid-column: 1; }
 }
+
+/* --- ricorrenze --- */
+.chk { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); font-size: .9rem; margin: 0; }
+.chk input { width: 20px; height: 20px; min-height: 0; }
+.tag.rec { border: 0; cursor: pointer; font: inherit; font-size: .75rem; color: var(--accent); background: var(--tag-com); min-height: 28px; }
+.row.ann .v, .row.ann .amt { text-decoration: line-through; color: var(--muted); }
+.row.ann { opacity: .75; }
+.rules-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.rules-head h2 { margin: 0; flex: 1; text-align: center; font-size: 1.05rem; }
+.row.rule { grid-template-columns: 1fr auto; }
+.row.rule .act { grid-column: 1 / 3; }
+.tag.on { background: var(--tag-com); color: var(--pos); }
+.tag.off { color: var(--neg); }
+#rule-ask .confirm { color: var(--text); margin: 12px 0 0; }
+#rule-ask .dlg-actions { flex-wrap: wrap; }
+#op-recur { margin-top: 12px; }
+#r-ogni { margin-top: 6px; }
