@@ -32,7 +32,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, chartData: null, shown: {}, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -216,7 +216,7 @@
     if (state.view === "cat") { renderCat(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
-    renderCards(); renderMonthly(); renderList();
+    renderCards(); renderMonthly(); renderList(); renderCatPanel();
   }
 
   function renderCards() {
@@ -1166,7 +1166,11 @@
       keys.map((k) => `<option value="${k}">${fmtMese(k)}${k > tm ? " (previsto)" : ""}</option>`).join("");
     $("#cat-per").value = state.catPer;
 
-    const per = state.catPer, conto = state.catConto;
+    $("#cat-body").innerHTML = catBlock(state.catConto, state.catPer, tm);
+  }
+
+  // Riepilogo delle uscite per categoria (HTML) per un conto ("c1" | "c2" | "tot") e un periodo ("all" o "YYYY-MM")
+  function catBlock(conto, per, tm) {
     const range = per === "all" ? ["0000-01-01", "9999-12-31"] : [`${per}-01`, `${per}-31`];
     const cur = Calc.categorySummary(state.entries, conto, range[0], range[1]);
     let prev = null, prevKey = null;
@@ -1174,8 +1178,7 @@
       prevKey = Calc.monthEndPlus(`${per}-01`, -1).slice(0, 7);
       prev = Calc.categorySummary(state.entries, conto, `${prevKey}-01`, `${prevKey}-31`);
     }
-    const body = $("#cat-body");
-    if (!cur.rows.length) { body.innerHTML = `<p class="empty">Nessuna spesa nel periodo.</p>`; return; }
+    if (!cur.rows.length) return `<p class="empty">Nessuna spesa nel periodo.</p>`;
     const prevMap = prev ? new Map(prev.rows.map((r) => [r.cat, r.tot])) : null;
     const dTot = prev && prev.uscite > 0 ? r2(cur.uscite - prev.uscite) : null;
     const saldo = r2(cur.entrate - cur.uscite);
@@ -1197,8 +1200,22 @@
         <div class="vl">${eur(r.tot)}${delta}</div></div>
         <div class="bar" role="img" aria-label="${esc(r.cat)}: ${share.toFixed(0)}% delle uscite"><i style="width:${Math.max(share, 1.5).toFixed(1)}%;background:${catColor(r.cat)}"></i></div></div>`;
     }).join("");
-    body.innerHTML = h + `</div><p class="note" style="margin-top:10px">Le uscite comuni contano per la quota di ciascun conto (metà). Le operazioni annullate sono escluse.</p>`;
+    return h + `</div><p class="note" style="margin-top:10px">Le uscite comuni contano per la quota di ciascun conto (metà). Le operazioni annullate sono escluse.</p>`;
   }
+
+  // Pannello laterale (schermi larghi): le categorie del conto della scheda aperta
+  function renderCatPanel() {
+    if (!$("#cat-panel")) return;
+    const tm = localToday().slice(0, 7), conto = state.tab === "comune" ? "tot" : state.tab;
+    const keys = [...new Set(state.entries.map((e) => e.o.data.slice(0, 7)))].sort();
+    if (state.panelPer !== "all" && !keys.includes(state.panelPer)) state.panelPer = keys.includes(tm) ? tm : (keys.find((k) => k > tm) || keys[keys.length - 1] || "all");
+    $("#cp-per").innerHTML = `<option value="all">Tutto il periodo</option>` + keys.map((k) => `<option value="${k}">${fmtMese(k)}${k > tm ? " (previsto)" : ""}</option>`).join("");
+    $("#cp-per").value = state.panelPer;
+    $("#cp-conto").textContent = conto === "tot" ? `${cname("c1")} + ${cname("c2")}` : cname(conto);
+    $("#cp-body").innerHTML = catBlock(conto, state.panelPer, tm);
+  }
+  $("#cp-per").addEventListener("change", (e) => { state.panelPer = e.target.value; renderCatPanel(); });
+  $("#cp-open").addEventListener("click", () => { state.catConto = state.tab === "comune" ? "tot" : state.tab; state.catPer = state.panelPer; go("cat"); });
 
   // ---------- CSV ----------
   async function copyCsv() {

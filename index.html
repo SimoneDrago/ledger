@@ -64,6 +64,7 @@
     <div id="main-view">
     <section class="cards" id="cards" aria-label="Riepilogo"></section>
 
+    <div class="main-grid"><div class="main-col">
     <nav class="tabs" id="tabs" role="tablist" aria-label="Conti">
       <button role="tab" data-tab="c1" id="tab-c1"></button>
       <button role="tab" data-tab="c2" id="tab-c2"></button>
@@ -83,6 +84,19 @@
     </div>
 
     <section id="list" aria-label="Operazioni"></section>
+    </div>
+
+    <aside class="card side" id="cat-panel" aria-label="Spese per categoria">
+      <div class="side-h">
+        <h3>Spese per categoria</h3>
+        <label class="visually-hidden" for="cp-per">Periodo</label>
+        <select id="cp-per"></select>
+      </div>
+      <div class="side-sub" id="cp-conto"></div>
+      <div id="cp-body"></div>
+      <button class="btn sm" id="cp-open" type="button">Apri la vista completa</button>
+    </aside>
+    </div>
     </div>
 
     <div id="rules-view" hidden>
