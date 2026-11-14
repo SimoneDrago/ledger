@@ -377,19 +377,19 @@
     <form id="form-rec" novalidate>
       <h2>Riconcilia il saldo</h2>
       <p class="hint">Scrivi il saldo che vedi sull'app della banca: l'app lo confronta con quello che ha calcolato.</p>
-      <label for="r-conto">Conto</label>
-      <select id="r-conto"><option value="c1"></option><option value="c2"></option></select>
-      <label for="r-data">Saldo alla data</label>
-      <input id="r-data" type="date" required>
-      <label for="r-banca">Saldo sulla banca (€)</label>
-      <input id="r-banca" type="text" inputmode="decimal" autocomplete="off" required>
-      <div id="rec-box" class="rec-box" aria-live="polite" hidden></div>
-      <div id="rec-hist" class="rec-hist" hidden></div>
-      <p id="rec-msg" class="msg" role="alert"></p>
+      <label for="rc-conto">Conto</label>
+      <select id="rc-conto"><option value="c1"></option><option value="c2"></option></select>
+      <label for="rc-data">Saldo alla data</label>
+      <input id="rc-data" type="date" required>
+      <label for="rc-banca">Saldo sulla banca (€)</label>
+      <input id="rc-banca" type="text" inputmode="decimal" autocomplete="off" required>
+      <div id="rc-box" class="rec-box" aria-live="polite" hidden></div>
+      <div id="rc-hist" class="rec-hist" hidden></div>
+      <p id="rc-msg" class="msg" role="alert"></p>
       <div class="dlg-actions">
-        <button class="btn" type="button" id="rec-cancel">Annulla</button>
-        <button class="btn" type="button" id="rec-check" hidden>Solo verifica</button>
-        <button class="btn primary" type="submit" id="rec-save" disabled>Confronta</button>
+        <button class="btn" type="button" id="rc-cancel">Annulla</button>
+        <button class="btn" type="button" id="rc-check" hidden>Solo verifica</button>
+        <button class="btn primary" type="submit" id="rc-save" disabled>Confronta</button>
       </div>
     </form>
   </dialog>

@@ -651,26 +651,26 @@
   const recState = { calc: null };
   function openRec() {
     if (state.hide) { hiddenWarn("la riconciliazione"); return; }
-    const sel = $("#r-conto");
+    const sel = $("#rc-conto");
     sel.options[0].textContent = cname("c1"); sel.options[1].textContent = cname("c2");
     sel.value = state.tab === "c2" ? "c2" : "c1";
     const today = localToday();
-    $("#r-data").value = today; $("#r-data").max = today;
-    $("#r-banca").value = ""; $("#rec-msg").textContent = "";
+    $("#rc-data").value = today; $("#rc-data").max = today;
+    $("#rc-banca").value = ""; $("#rc-msg").textContent = "";
     recState.calc = null; recRefresh();
     $("#dlg-rec").showModal();
   }
   function recParse() {
-    const raw = $("#r-banca").value, neg = /^\s*-/.test(raw), n = parseImporto(raw.replace(/^\s*-/, ""));
+    const raw = $("#rc-banca").value, neg = /^\s*-/.test(raw), n = parseImporto(raw.replace(/^\s*-/, ""));
     return Number.isNaN(n) || raw.trim() === "" ? NaN : neg ? -n : n;
   }
   // Ricalcola il confronto ogni volta che cambiano conto, data o saldo scritto.
   function recRefresh() {
-    const conto = $("#r-conto").value, data = $("#r-data").value, banca = recParse();
-    const box = $("#rec-box"), save = $("#rec-save"), chk = $("#rec-check");
+    const conto = $("#rc-conto").value, data = $("#rc-data").value, banca = recParse();
+    const box = $("#rc-box"), save = $("#rc-save"), chk = $("#rc-check");
     // storico del conto scelto
     const hist = state.riconc[conto].slice(-3).reverse();
-    const hb = $("#rec-hist");
+    const hb = $("#rc-hist");
     hb.hidden = !hist.length;
     hb.innerHTML = hist.length ? `<strong>Ultime verifiche</strong>` + hist.map((x) => `<div><span>${fmtData(x.data)}</span><span>${x.diff === 0 ? "coincideva" : x.rettifica ? `rettificato ${sgn(x.diff)}` : `differenza ${sgn(x.diff)} non registrata`}</span></div>`).join("") : "";
     const ok = Number.isFinite(banca) && /^\d{4}-\d\d-\d\d$/.test(data) && data <= localToday();
@@ -693,15 +693,15 @@
     if (d === 0) { chk.hidden = true; save.textContent = "Conferma verifica"; }
     else { chk.hidden = false; save.textContent = `Registra rettifica ${sgn(d)} €`; }
   }
-  ["#r-conto", "#r-data"].forEach((s) => $(s).addEventListener("change", recRefresh));
-  $("#r-banca").addEventListener("input", recRefresh);
+  ["#rc-conto", "#rc-data"].forEach((s) => $(s).addEventListener("change", recRefresh));
+  $("#rc-banca").addEventListener("input", recRefresh);
   $("#btn-rec").addEventListener("click", openRec);
-  $("#rec-cancel").addEventListener("click", () => $("#dlg-rec").close());
+  $("#rc-cancel").addEventListener("click", () => $("#dlg-rec").close());
   async function recDo(withAdjust) {
-    const c = recState.calc, msg = $("#rec-msg"); msg.textContent = "";
+    const c = recState.calc, msg = $("#rc-msg"); msg.textContent = "";
     if (!c) return;
     if (c.data > localToday()) { msg.textContent = "Scegli una data fino a oggi."; return; }
-    const btns = ["#rec-save", "#rec-check", "#rec-cancel"].map((s) => $(s));
+    const btns = ["#rc-save", "#rc-check", "#rc-cancel"].map((s) => $(s));
     btns.forEach((b) => { b.disabled = true; });
     try {
       if (withAdjust && c.diff !== 0) {
@@ -726,7 +726,7 @@
     toast(warn ? "Rettifica registrata, ma la verifica non è stata salvata." : withAdjust && c.diff !== 0 ? "Rettifica registrata. Il conto è allineato." : c.diff === 0 ? "Verificato: i saldi coincidono." : "Verifica salvata (differenza non registrata).");
   }
   $("#form-rec").addEventListener("submit", (e) => { e.preventDefault(); recDo(true); });
-  $("#rec-check").addEventListener("click", () => recDo(false));
+  $("#rc-check").addEventListener("click", () => recDo(false));
 
   // ---------- vista "Ricorrenti" ----------
   function renderRules() {

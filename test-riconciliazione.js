@@ -43,3 +43,12 @@ assert.deepStrictEqual([s.aperta, s.stale], [false, false]); // rettificata
 s = C.verifyStatus([{ data: "2026-01-01", diff: 3, rettifica: false }, { data: "2026-03-01", diff: 0 }], "2026-03-01");
 assert.deepStrictEqual([s.days, s.aperta], [0, false]); // conta l'ultima
 console.log("ok: riconciliazione");
+
+// nessun id ripetuto in index.html (un id doppio fa leggere all'app l'elemento sbagliato)
+{
+  const html = require("fs").readFileSync(__dirname + "/index.html", "utf8");
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+  assert.deepStrictEqual(dup, [], "id ripetuti: " + dup.join(", "));
+}
+console.log("ok: id unici");
