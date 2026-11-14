@@ -208,7 +208,7 @@
     $("#tab-c1").textContent = cname("c1"); $("#tab-c2").textContent = cname("c2");
     document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
     $("#btn-add").textContent = tab === "comune" ? "+ Aggiungi uscita comune" : `+ Aggiungi a ${cname(tab)}`;
-    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === state.view ? "page" : "false"));
+    markNav(state.view);
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
@@ -399,13 +399,42 @@
   $("#btn-add").addEventListener("click", () => openOp(null));
   $("#btn-start").addEventListener("click", openStart);
   $("#btn-csv").addEventListener("click", copyCsv);
-  $("#btn-rules").addEventListener("click", () => { state.view = "rules"; state.confirmRule = null; render(); window.scrollTo(0, 0); });
+  $("#btn-rules").addEventListener("click", () => go("rules"));
   // barra di navigazione in basso (telefono)
-  function go(view) { state.view = view; state.confirmDel = null; state.confirmRule = null; state.simConfirm = null; render(); window.scrollTo(0, 0); }
+  // Cambio pagina: la vecchia esce sfumando da un lato, la nuova entra dall'altro con una leggera zoomata
+  // (la direzione segue l'ordine della barra). Senza animazioni disponibili o con "riduci movimento" il cambio è immediato.
+  const VIEW_ORDER = ["main", "cat", "rules", "sim"];
+  const viewEl = (v) => $("#" + v + "-view");
+  let navTok = 0;
+  function markNav(view) {
+    const i = VIEW_ORDER.indexOf(view);
+    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === view ? "page" : "false"));
+    $("#bnav").style.setProperty("--i", String(Math.max(0, i)));
+  }
+  function go(view) {
+    if (view === state.view) { window.scrollTo(0, 0); return; }
+    const dir = VIEW_ORDER.indexOf(view) > VIEW_ORDER.indexOf(state.view) ? "fwd" : "back";
+    const apply = () => {
+      state.view = view; state.confirmDel = null; state.confirmRule = null; state.simConfirm = null;
+      render(); window.scrollTo(0, 0);
+      const el = viewEl(view);
+      if (el && animOk()) { el.dataset.dir = dir; el.classList.add("vin"); setTimeout(() => el.classList.remove("vin"), 520); }
+    };
+    document.querySelectorAll(".vout, .vin").forEach((x) => x.classList.remove("vout", "vin"));
+    if (!animOk()) { apply(); return; }
+    markNav(view);                                  // la capsula di vetro parte subito
+    const cur = viewEl(state.view), tok = ++navTok;
+    cur.dataset.dir = dir; cur.classList.add("vout");
+    setTimeout(() => { if (tok !== navTok) return; cur.classList.remove("vout"); apply(); }, 160);
+  }
+  function animOk() {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return !reduce && typeof requestAnimationFrame === "function";
+  }
   $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
-  $("#btn-sim").addEventListener("click", () => { state.view = "sim"; state.simConfirm = null; render(); window.scrollTo(0, 0); });
-  $("#sim-back").addEventListener("click", () => { state.view = "main"; state.simConfirm = null; render(); });
-  $("#rules-back").addEventListener("click", () => { state.view = "main"; state.confirmRule = null; render(); });
+  $("#btn-sim").addEventListener("click", () => go("sim"));
+  $("#sim-back").addEventListener("click", () => go("main"));
+  $("#rules-back").addEventListener("click", () => go("main"));
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
 
   $("#list").addEventListener("click", async (e) => {
@@ -1149,8 +1178,8 @@
 
   // ---------- spese per categoria ----------
   const catColor = (name) => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 62% 52%)`; };
-  $("#btn-cat").addEventListener("click", () => { state.view = "cat"; render(); window.scrollTo(0, 0); });
-  $("#cat-back").addEventListener("click", () => { state.view = "main"; render(); });
+  $("#btn-cat").addEventListener("click", () => go("cat"));
+  $("#cat-back").addEventListener("click", () => go("main"));
   $("#cat-conto").addEventListener("change", (e) => { state.catConto = e.target.value; renderCat(); });
   $("#cat-per").addEventListener("change", (e) => { state.catPer = e.target.value; renderCat(); });
 
