@@ -9,6 +9,12 @@
   const sgn = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + nf.format(Math.abs(r2(n)));
   const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
   const mesiCorti = MESI.map((m) => m.slice(0, 3));
+  // Modalità privacy: saldi, entrate e stipendi diventano asterischi; le uscite restano visibili.
+  const MASK = "***** €";
+  function mEur(n) { return state.hide ? MASK : eur(n); }
+  function sgnPriv(n) { return state.hide && n > 0 ? MASK : sgn(n); }
+  const hiddenWarn = (what) => { toast(`Mostra i dati (icona occhio) per modificare ${what}.`); };
+  const isEntrata = (x) => !!x && x.conto !== "comune" && x.tipo === "entrata";
   const fmtMese = (k) => `${MESI[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
   const fmtGiorno = (d) => `${Number(d.slice(8))} ${mesiCorti[Number(d.slice(5, 7)) - 1]}`;
   const fmtData = (d) => `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
@@ -21,7 +27,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -129,6 +135,7 @@
     try { await load(); } catch (e) { showView("app"); await handleError(e, "Caricamento non riuscito. Controlla la connessione e riprova."); return; }
     state.scenId = lsGet("conti-scen");
     state.open = loadOpen();
+    state.hide = lsGet("conti-hide") === "1"; applyHide();
     const saved = lsGet("conti-tab");
     if (saved === "c1" || saved === "c2" || saved === "comune") state.tab = saved;
     showView("app"); render();
@@ -172,6 +179,18 @@
   });
   $("#btn-logout").addEventListener("click", () => sb.auth.signOut());
 
+  // ---------- privacy (occhio) ----------
+  function applyHide() {
+    const b = $("#btn-eye");
+    b.setAttribute("aria-pressed", String(state.hide));
+    const label = state.hide ? "Mostra saldi ed entrate" : "Nascondi saldi ed entrate";
+    b.setAttribute("aria-label", label); b.title = label;
+  }
+  $("#btn-eye").addEventListener("click", () => {
+    state.hide = !state.hide; lsSet("conti-hide", state.hide ? "1" : "0");
+    applyHide(); render();
+  });
+
   // ---------- rendering ----------
   const nomeConto = (k) => (k === "comune" ? "Conto comune" : state.cfg[k].nome);
 
@@ -197,17 +216,17 @@
     const now = Calc.balanceAt(state.entries, state.cfg, today);
     const lastDate = state.entries.length ? state.entries[state.entries.length - 1].o.data : null;
     const future = lastDate && lastDate > today;
-    const proj = (k) => (future ? `fine ${fmtMese(lastDate.slice(0, 7))}: ${eur(state.cur[k])}` : "");
+    const proj = (k) => (future ? `fine ${fmtMese(lastDate.slice(0, 7))}: ${mEur(state.cur[k])}` : "");
     const comuni = state.entries.filter((e) => e.o.conto === "comune");
     const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
     const personal = (k) => `<button type="button" class="card sum ${state.tab === k ? "active" : ""}" data-tab="${k}">
-      <span class="t">${esc(state.cfg[k].nome)} · oggi</span><span class="big">${eur(now[k])}</span>
-      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${eur(state.min[k])}</span></button>`;
+      <span class="t">${esc(state.cfg[k].nome)} · oggi</span><span class="big">${mEur(now[k])}</span>
+      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span></button>`;
     $("#cards").innerHTML = personal("c1") + personal("c2") +
       `<button type="button" class="card sum ${state.tab === "comune" ? "active" : ""}" data-tab="comune">
       <span class="t">Conto comune · uscite finora</span><span class="big">${eur(totOggi)}</span>
-      <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${eur(now.c1 + now.c2)}</span></button>`;
+      <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${mEur(now.c1 + now.c2)}</span></button>`;
   }
 
   function groupByMonth(arr) {
@@ -242,10 +261,10 @@
           const v = e.p[tab];
           if (e.o.conto === "comune") com += -v; else if (v > 0) ent += v; else usc += -v;
         }
-        return `<tr><td>${fmtMese(k)}</td><td>${eur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${eur(es[es.length - 1].b[tab])}</strong></td></tr>`;
+        return `<tr><td>${fmtMese(k)}</td><td>${mEur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${mEur(es[es.length - 1].b[tab])}</strong></td></tr>`;
       }).join("");
       h = `<table><thead><tr><th>Mese</th><th>Entrate</th><th>Uscite</th><th>Conto comune</th><th>Saldo fine mese</th></tr></thead>
-        <tbody><tr><td>Partenza</td><td colspan="3"></td><td><strong>${eur(state.cfg[tab].iniziale)}</strong></td></tr>${rows}</tbody></table>`;
+        <tbody><tr><td>Partenza</td><td colspan="3"></td><td><strong>${mEur(state.cfg[tab].iniziale)}</strong></td></tr>${rows}</tbody></table>`;
     }
     $("#monthly").innerHTML = h;
   }
@@ -261,7 +280,7 @@
       sub = (comune ? `metà di ${eur(o.importo)}` : "");
     }
     if (e.ann) sub = (sub ? sub + " · " : "") + "annullata";
-    else sub = (sub ? sub + " · " : "") + (tab === "comune" ? "" : `saldo ${eur(e.b[tab])}`);
+    else sub = (sub ? sub + " · " : "") + (tab === "comune" ? "" : `saldo ${mEur(e.b[tab])}`);
     sub = sub.replace(/ · $/, "");
     const tags = (o.categoria ? `<span class="tag">${esc(o.categoria)}</span>` : "") +
       (comune && tab !== "comune" ? `<span class="tag com">Conto comune · metà</span>` : "") +
@@ -282,7 +301,7 @@
     }
     return `<li class="row tx ${cls === "pos" ? "in" : "out"}${e.ann ? " ann" : ""}"><div class="av" aria-hidden="true">${CAT_ICON[o.categoria] || (cls === "pos" ? "💶" : "🧾")}</div>
       <div class="mn"><div class="v">${esc(o.voce)}</div><div class="tags"><span class="d">${fmtGiorno(o.data)}</span>${tags}</div></div>
-      <div class="a"><div class="amt ${cls}">${sgn(amt)}</div><div class="sub">${sub}</div></div>
+      <div class="a"><div class="amt ${cls}">${sgnPriv(amt)}</div><div class="sub">${sub}</div></div>
       <div class="act">${act}</div></li>`;
   }
 
@@ -292,7 +311,7 @@
     let arr = state.entries.filter(filter);
     if (state.showAnn) arr = arr.concat(state.annEntries.filter(filter)).sort((a, b) => Calc.cmp(a.o, b.o));
     const months = groupByMonth(arr);
-    let h = tab === "comune" ? "" : `<div class="month"><div class="mhead"><span>Saldo di partenza · ${fmtData(state.cfg.dataInizio)}</span><span>${eur(state.cfg[tab].iniziale)}</span></div></div>`;
+    let h = tab === "comune" ? "" : `<div class="month"><div class="mhead"><span>Saldo di partenza · ${fmtData(state.cfg.dataInizio)}</span><span>${mEur(state.cfg[tab].iniziale)}</span></div></div>`;
     if (!months.size) h += `<p class="empty">Nessuna operazione.</p>`;
     else h += `<div class="mbar"><button type="button" class="btn sm" data-mall="open">Espandi tutto</button><button type="button" class="btn sm" data-mall="close">Comprimi tutto</button></div>`;
     // di default è aperto solo il mese corrente (o il primo successivo, altrimenti l'ultimo)
@@ -307,10 +326,10 @@
         if (tab === "comune") usc += e.o.importo;
         else if (e.p[tab] > 0) ent += e.p[tab]; else usc += -e.p[tab];
       }
-      const tot = tab === "comune" ? `uscite ${eur(usc)}` : `entrate ${eur(ent)} · uscite ${eur(usc)}`;
-      const foot = tab === "comune" || !last ? "" : `<div class="mfoot">Saldo fine mese: <strong>${eur(last.b[tab])}</strong></div>`;
+      const tot = tab === "comune" ? `uscite ${eur(usc)}` : `entrate ${mEur(ent)} · uscite ${eur(usc)}`;
+      const foot = tab === "comune" || !last ? "" : `<div class="mfoot">Saldo fine mese: <strong>${mEur(last.b[tab])}</strong></div>`;
       const open = isOpen(k);
-      const saldo = tab === "comune" || !last ? "" : ` · saldo ${eur(last.b[tab])}`;
+      const saldo = tab === "comune" || !last ? "" : ` · saldo ${mEur(last.b[tab])}`;
       h += `<div class="month"><button type="button" class="mhead" data-month="${k}" aria-expanded="${open}">
           <span><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span> ${fmtMese(k)}</span><span class="tot">${tot}${open ? "" : saldo}</span></button>
         ${open ? `<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
@@ -392,6 +411,7 @@
       ? `Verrà tolto ${eur(r2(imp / 2))} da ${state.cfg.c1.nome} e ${eur(r2(imp - r2(imp / 2)))} da ${state.cfg.c2.nome}.` : "";
   }
   function openOp(op) {
+    if (state.hide && isEntrata(op)) { hiddenWarn("le entrate"); return; }
     state.editing = op;
     const { cfg } = state;
     fConto.options[0].textContent = cfg.c1.nome; fConto.options[1].textContent = cfg.c2.nome;
@@ -466,6 +486,7 @@
 
   // ---------- saldi di partenza ----------
   function openStart() {
+    if (state.hide) { hiddenWarn("i saldi di partenza"); return; }
     const { cfg } = state;
     $("#s-data").value = cfg.dataInizio; $("#s-n1").value = cfg.c1.nome; $("#s-n2").value = cfg.c2.nome;
     $("#s-i1").value = String(cfg.c1.iniziale).replace(".", ","); $("#s-i2").value = String(cfg.c2.iniziale).replace(".", ",");
@@ -520,7 +541,7 @@
         <div class="tags"><span class="tag">${esc(nomeConto(r.conto))}</span>${r.categoria ? `<span class="tag">${esc(r.categoria)}</span>` : ""}
           <span class="tag ${r.attiva ? "on" : "off"}">${r.attiva ? "attiva" : "sospesa"}</span></div>
         <div class="sub">${esc(Calc.freqText(r))} · ${periodo} · ${prossima}</div></div>
-        <div class="a"><div class="amt ${sign > 0 ? "pos" : "neg"}">${sgn(sign * r.importo)}</div>${r.conto === "comune" ? `<div class="sub">metà per conto</div>` : ""}</div>
+        <div class="a"><div class="amt ${sign > 0 ? "pos" : "neg"}">${sgnPriv(sign * r.importo)}</div>${r.conto === "comune" ? `<div class="sub">metà per conto</div>` : ""}</div>
         <div class="act">${act}</div></li>`;
     }).join("");
   }
@@ -602,6 +623,7 @@
 
   // rule: regola esistente; fromOp: operazione da collegare (riga completa)
   function openRule(rule, fromOp) {
+    if (state.hide && (isEntrata(rule) || isEntrata(fromOp))) { hiddenWarn("le entrate"); return; }
     state.editingRule = rule || null; state.linkOp = fromOp || null; state.ruleDraft = null;
     const { cfg } = state;
     rConto.options[0].textContent = cfg.c1.nome; rConto.options[1].textContent = cfg.c2.nome;
@@ -746,8 +768,8 @@
       const gd = res.goalDef, gr = res.goal;
       h += `<div class="card verdict ${gr.ok ? "ok" : "ko"}">
         <div class="big">${gr.ok ? "✅ Ce la fai" : "❌ Non ci arrivi"} — ${esc(contoSim(gd.conto))} al ${fmtData(gd.data)}</div>
-        <div>Con lo scenario: <strong>${eur(gr.saldoSim)}</strong> · obiettivo ${eur(gd.minimo)} · ${gr.ok ? "margine" : "mancano"} <strong>${eur(Math.abs(gr.margine))}</strong></div>
-        <div class="sub">Senza scenario: ${eur(gr.saldoReale)}</div></div>`;
+        <div>Con lo scenario: <strong>${mEur(gr.saldoSim)}</strong> · obiettivo ${eur(gd.minimo)} · ${gr.ok ? "margine" : "mancano"} <strong>${mEur(Math.abs(gr.margine))}</strong></div>
+        <div class="sub">Senza scenario: ${mEur(gr.saldoReale)}</div></div>`;
     } else if (g && g.minimo !== "" && g.minimo != null) {
       h += `<div class="card verdict"><div class="sub">Obiettivo incompleto: aggiungi conto, importo e data da «Nome e obiettivo», oppure aggiungi almeno una voce.</div></div>`;
     } else {
@@ -774,7 +796,7 @@
           <div><div class="v">${esc(v.voce)}</div>
             <div class="tags"><span class="tag">${esc(nomeConto(v.conto))}</span></div>
             <div class="sub">${voceWhen(v)}</div></div>
-          <div class="a"><div class="amt ${sign > 0 ? "pos" : "neg"}">${sgn(sign * Number(v.importo))}</div>${v.conto === "comune" ? `<div class="sub">metà per conto</div>` : ""}</div>
+          <div class="a"><div class="amt ${sign > 0 ? "pos" : "neg"}">${sgnPriv(sign * Number(v.importo))}</div>${v.conto === "comune" ? `<div class="sub">metà per conto</div>` : ""}</div>
           <div class="act">${act}</div></li>`;
       }).join("") + `</ul>`;
     }
@@ -789,8 +811,8 @@
         const s = k === "tot" ? r2(row.sim.c1 + row.sim.c2) : row.sim[k];
         return gd.conto === k && s < gd.minimo;
       };
-      const cell = (v, extra) => `<td class="${(v < 0 ? "neg-cell " : "") + (extra || "")}">${eur(v)}</td>`;
-      const dif = (a, b) => { const d = r2(b - a); return `<td>${d === 0 ? "—" : sgn(d)}</td>`; };
+      const cell = (v, extra) => `<td class="${state.hide ? "" : (v < 0 ? "neg-cell " : "") + (extra || "")}">${mEur(v)}</td>`;
+      const dif = (a, b) => { const d = r2(b - a); return `<td>${d === 0 ? "—" : sgnPriv(d)}</td>`; };
       h += `<div class="sim-h"><h3>Mese per mese</h3></div>
         <section class="card scroll"><table><thead><tr><th>Fine mese</th>
           <th>${esc(n.c1.nome)} reale</th><th>con scenario</th><th>diff.</th>
@@ -799,7 +821,7 @@
           ${cell(r.real.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}${dif(r.real.c1, r.sim.c1)}
           ${cell(r.real.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}${dif(r.real.c2, r.sim.c2)}</tr>`).join("") +
         `</tbody></table></section>
-        <p class="note">Punto più basso con lo scenario: ${esc(n.c1.nome)} <strong>${eur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(n.c2.nome)} <strong>${eur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
+        <p class="note">Punto più basso con lo scenario: ${esc(n.c1.nome)} <strong>${mEur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(n.c2.nome)} <strong>${mEur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
         Il calcolo arriva fino a ${fmtData(res.endDate)} e conta solo quello che è registrato: stipendi e spese non ancora inseriti non sono inclusi.</p>`;
     }
     body.innerHTML = h;
@@ -927,6 +949,7 @@
     updateVoceUi();
   });
   function openVoce(v) {
+    if (state.hide && isEntrata(v)) { hiddenWarn("le entrate"); return; }
     editingVoce = v || null;
     vConto.options[0].textContent = state.cfg.c1.nome; vConto.options[1].textContent = state.cfg.c2.nome;
     $("#voce-title").textContent = v ? "Modifica voce" : "Nuova voce";
@@ -1003,7 +1026,7 @@
     const saldo = r2(cur.entrate - cur.uscite);
     let h = `<div class="card cat-sum"><div class="lbl">Uscite${per !== "all" && per > tm ? " previste" : ""} · ${per === "all" ? "tutto il periodo" : fmtMese(per)}</div>
       <div class="big">${eur(cur.uscite)}</div>
-      <div class="line"><span>Entrate <strong>${eur(cur.entrate)}</strong></span><span>Differenza <strong>${sgn(saldo)}</strong></span>
+      <div class="line"><span>Entrate <strong>${mEur(cur.entrate)}</strong></span><span>Differenza <strong>${state.hide ? MASK : sgn(saldo)}</strong></span>
       ${dTot !== null ? `<span>${dTot > 0 ? "▲" : dTot < 0 ? "▼" : "="} <strong>${eur(Math.abs(dTot))}</strong> rispetto a ${fmtMese(prevKey)}</span>` : ""}</div></div>
       <div class="card" style="padding:6px 12px">`;
     h += cur.rows.map((r) => {
