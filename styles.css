@@ -524,3 +524,21 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
   .dn-t small { flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .dn-seg, .mchip { transition: none; } }
+
+/* «Impatto del mese»: spese registrate e voci dello scenario in due blocchi distinti */
+.dn-legend { gap: 10px; }
+.lg-grp { border-radius: 14px; padding: 4px 4px 2px; }
+.lg-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 6px 8px 4px; font-size: .74rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.lg-h strong { font-size: .86rem; letter-spacing: 0; text-transform: none; color: var(--text); }
+.lg-grp.sim {
+  padding: 0 4px 4px; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
+  border: 1.5px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 10px 24px -16px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+.lg-grp.sim .lg-h { margin: 0 -4px 2px; padding: 9px 12px; background: var(--grad); color: var(--accent-text); }
+.lg-grp.sim .lg-h strong { color: var(--accent-text); }
+.lg-grp.sim .lg-row + .lg-row { border-top: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 0; }
+.lg-grp.sim .lg-row:hover, .lg-grp.sim .lg-row.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.lg-f { display: flex; justify-content: space-between; gap: 8px; margin: 2px 4px 0; padding: 8px 8px 6px; border-top: 1.5px solid color-mix(in srgb, var(--accent) 40%, var(--line)); font-size: .82rem; font-weight: 700; color: var(--accent); }
+.lg-f strong { font-weight: 800; }

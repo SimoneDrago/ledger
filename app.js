@@ -1026,10 +1026,16 @@
       <div class="dn-t pos"><span>Entrate</span><strong>${mEur(ent)}</strong>${state.hide ? "" : `<small>reali ${eur(im.entrate.real)} · scenario ${eur(im.entrate.sim)}</small>`}</div>
       <div class="dn-t neg"><span>Uscite</span><strong>${eur(usc)}</strong>${sub(im.uscite.real, im.uscite.sim)}</div>
       <div class="dn-t net ${net < 0 && !state.hide ? "neg" : "pos"}"><span>Netto del mese</span><strong>${state.hide ? MASK : sgn(net)}</strong>${state.hide ? "" : `<small>${net < 0 ? "escono più soldi di quanti entrano" : "entra più di quanto esce"}</small>`}</div></div>`;
-    const legend = segs.map((s, i) => `<button type="button" class="lg-row${sel === i ? " on" : ""}" data-sact="seg" data-k="${i}" aria-pressed="${sel === i}">
+    const pct = (s) => `${((s.tot / usc) * 100).toFixed(s.tot / usc < .1 ? 1 : 0).replace(".", ",")}%`;
+    const lrow = (s, i) => `<button type="button" class="lg-row${sel === i ? " on" : ""}" data-sact="seg" data-k="${i}" aria-pressed="${sel === i}">
         <i class="lg-dot" style="background:${cols[i]}"></i>
-        <span class="lg-nm">${s.kind === "real" ? (CAT_ICON[s.label] || "🏷️") + " " : ""}${esc(s.label)}${s.kind === "sim" ? ` <em class="lg-tag">scenario</em>` : ""}<small>${s.n} ${s.n === 1 ? "operazione" : "operazioni"} · ${((s.tot / usc) * 100).toFixed(s.tot / usc < .1 ? 1 : 0).replace(".", ",")}%</small></span>
-        <span class="lg-v">${eur(s.tot)}</span></button>`).join("");
+        <span class="lg-nm">${s.kind === "real" ? (CAT_ICON[s.label] || "🏷️") + " " : ""}${esc(s.label)}<small>${s.n} ${s.n === 1 ? "operazione" : "operazioni"} · ${pct(s)}</small></span>
+        <span class="lg-v">${eur(s.tot)}</span></button>`;
+    const realIdx = segs.map((s, i) => i).filter((i) => segs[i].kind === "real");
+    const simIdx = segs.map((s, i) => i).filter((i) => segs[i].kind === "sim");
+    const legend = (realIdx.length ? `<div class="lg-grp"><div class="lg-h"><span>Spese registrate</span><strong>${eur(im.uscite.real)}</strong></div>${realIdx.map((i) => lrow(segs[i], i)).join("")}</div>` : "")
+      + (simIdx.length ? `<div class="lg-grp sim"><div class="lg-h"><span>🧪 Voci dello scenario</span><strong>${eur(im.uscite.sim)}</strong></div>${simIdx.map((i) => lrow(segs[i], i)).join("")}
+        <div class="lg-f"><span>Totale scenario</span><strong>${eur(im.uscite.sim)}</strong></div></div>` : "");
     return `<div class="sim-h"><h3>Impatto del mese</h3></div>
       <section class="card donut-card"><div class="seg">${pills}</div>
       <div class="mchips" role="group" aria-label="Mese">${chips}</div>
