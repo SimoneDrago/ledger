@@ -156,7 +156,17 @@ td:first-child { text-transform: capitalize; font-weight: 600; }
   font-weight: 800; letter-spacing: -.01em; text-transform: capitalize; background: none; border: 0; color: inherit;
   font-family: inherit; font-size: 1.02rem; text-align: left;
 }
-button.mhead { cursor: pointer; min-height: 48px; border-radius: 14px; padding: 8px 10px; transition: background .15s; }
+button.mhead {
+  cursor: pointer; min-height: 48px; border-radius: 14px; padding: 8px 10px;
+  position: sticky; top: calc(8px + env(safe-area-inset-top)); z-index: 5;
+  transition: background .2s, box-shadow .2s;
+}
+/* solo l'intestazione agganciata in alto: vetro sfocato con ombra morbida */
+button.mhead.pinned {
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6); backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow: 0 10px 24px -14px rgba(15, 23, 42, .45), inset 0 0 0 1px color-mix(in srgb, var(--line) 85%, transparent);
+}
 button.mhead:hover { background: color-mix(in srgb, var(--card) 70%, transparent); }
 .mhead .tot { text-align: right; font-weight: 500; color: var(--muted); font-size: .8rem; text-transform: none; }
 .chev { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 6px; border-radius: 8px; background: var(--tag); color: var(--accent); font-size: .8rem; }

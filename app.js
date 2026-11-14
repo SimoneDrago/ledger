@@ -382,7 +382,27 @@
         ${open ? `<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
     }
     $("#list").innerHTML = h;
+    updatePinned();
   }
+
+  // L'intestazione del mese resta agganciata in alto mentre scorri. Solo quella agganciata riceve lo sfondo
+  // di vetro sfocato (un solo effetto alla volta: più leggero per il telefono).
+  let pinTick = false;
+  function updatePinned() {
+    pinTick = false;
+    const heads = [...document.querySelectorAll("#list button.mhead")];
+    if (!heads.length || state.view !== "main") return;
+    const top = parseFloat(window.getComputedStyle(heads[0]).top);
+    const limit = (Number.isFinite(top) ? top : 8) + 1;
+    let pinned = null;
+    for (const h of heads) { if (h.getBoundingClientRect().top <= limit) pinned = h; else break; }
+    heads.forEach((h) => h.classList.toggle("pinned", h === pinned));
+  }
+  window.addEventListener("scroll", () => {
+    if (pinTick) return;
+    pinTick = true;
+    (window.requestAnimationFrame || ((f) => f()))(updatePinned);
+  }, { passive: true });
   // mesi aperti: ricordati su questo dispositivo (null = predefinito)
   function loadOpen() {
     try { const v = JSON.parse(lsGet("conti-open") || "null"); return Array.isArray(v) ? new Set(v) : null; } catch { return null; }
