@@ -115,12 +115,13 @@
     const rules = (r.data || []).map(normRule);
     if (!rules.length) return 0;
     const ex = await fetchAll(() => sb.from("ops").select("ricorrenza_id,data_prevista").not("ricorrenza_id", "is", null).order("id"));
-    const have = new Set(ex.map((x) => `${x.ricorrenza_id}|${x.data_prevista}`));
+    // una regola ha al massimo una occorrenza al mese: se il mese ha già una riga (anche spostata o annullata) non se ne crea un'altra
+    const have = new Set(ex.map((x) => `${x.ricorrenza_id}|${String(x.data_prevista || "").slice(0, 7)}`));
     const hasAny = new Set(ex.map((x) => x.ricorrenza_id));
     const rows = [];
     for (const rule of rules) {
       for (const d of Calc.generationDates(rule, today, hasAny.has(rule.id))) {
-        if (!have.has(`${rule.id}|${d}`)) rows.push({ ...Calc.ruleRow(rule, d), updated_at: nowIso() });
+        if (!have.has(`${rule.id}|${d.slice(0, 7)}`)) rows.push({ ...Calc.ruleRow(rule, d), updated_at: nowIso() });
       }
     }
     for (let i = 0; i < rows.length; i += 200) {
@@ -531,13 +532,20 @@
       let act;
       const c = state.confirmRule;
       if (c && c.id === r.id) {
-        const lead = c.mode === "del" ? "Eliminare la regola." : "Sospendere la regola.";
-        act = `<span class="confirm">${lead} Eliminare anche le operazioni future non modificate?</span>
-          <button type="button" class="btn danger sm" data-ract="yes" data-id="${esc(r.id)}">Sì, elimina anche le future</button>
-          <button type="button" class="btn sm" data-ract="no" data-id="${esc(r.id)}">No, tienile</button>
-          <button type="button" class="btn sm" data-ract="cancel">Annulla</button>`;
+        if (c.mode === "ral") {
+          act = `<span class="confirm">Riallineare le operazioni dal mese in corso alla regola? Quelle modificate a mano non si toccano.</span>
+            <button type="button" class="btn primary sm" data-ract="yes" data-id="${esc(r.id)}">Sì, riallinea</button>
+            <button type="button" class="btn sm" data-ract="cancel">Annulla</button>`;
+        } else {
+          const lead = c.mode === "del" ? "Eliminare la regola." : "Sospendere la regola.";
+          act = `<span class="confirm">${lead} Eliminare anche le operazioni future non modificate?</span>
+            <button type="button" class="btn danger sm" data-ract="yes" data-id="${esc(r.id)}">Sì, elimina anche le future</button>
+            <button type="button" class="btn sm" data-ract="no" data-id="${esc(r.id)}">No, tienile</button>
+            <button type="button" class="btn sm" data-ract="cancel">Annulla</button>`;
+        }
       } else {
         act = `<button type="button" class="btn sm" data-ract="edit" data-id="${esc(r.id)}">Modifica</button>
+          ${r.attiva ? `<button type="button" class="btn sm" data-ract="ral" data-id="${esc(r.id)}">Riallinea</button>` : ""}
           <button type="button" class="btn sm" data-ract="toggle" data-id="${esc(r.id)}">${r.attiva ? "Sospendi" : "Riattiva"}</button>
           <button type="button" class="btn sm" data-ract="del" data-id="${esc(r.id)}">Elimina</button>`;
       }
@@ -559,6 +567,7 @@
     if (act === "edit") { openRule(rule); return; }
     if (act === "cancel") { state.confirmRule = null; renderRules(); return; }
     if (act === "del") { state.confirmRule = { id, mode: "del" }; renderRules(); return; }
+    if (act === "ral") { state.confirmRule = { id, mode: "ral" }; renderRules(); return; }
     if (act === "toggle") {
       if (rule.attiva) { state.confirmRule = { id, mode: "sus" }; renderRules(); return; }
       b.disabled = true;
@@ -572,7 +581,11 @@
       document.querySelectorAll("#rules-list button").forEach((x) => { x.disabled = true; });
       const today = localToday();
       try {
-        if (mode === "sus") {
+        if (mode === "ral") {
+          await applyToFuture(rule, rule, true);
+          await genera();
+          toast("Operazioni riallineate.");
+        } else if (mode === "sus") {
           if (dropFuture) { // righe future non modificate e non annullate
             const r = await sb.from("ops").delete().eq("ricorrenza_id", id).gte("data_prevista", today).eq("modificata", false).eq("annullata", false);
             if (r.error) throw r.error;
@@ -675,18 +688,48 @@
   $("#ask-no").addEventListener("click", () => saveRule(false));
   $("#ask-yes").addEventListener("click", () => saveRule(true));
 
-  async function applyToFuture(old, nuova) {
-    const today = localToday();
-    const schedule = old.ogni_mesi !== nuova.ogni_mesi || old.giorno !== nuova.giorno || old.data_inizio !== nuova.data_inizio ||
+  // Applica la modifica di una regola alle operazioni già create, dal MESE IN CORSO in poi.
+  // Le righe modificate a mano non si toccano. Se cambia il calendario (giorno, frequenza, inizio, fine)
+  // la riga di ogni mese viene SPOSTATA alla nuova data dello stesso mese (gli annullamenti la seguono);
+  // se in un mese non c'è più una data, la riga futura viene eliminata e quella già passata resta.
+  async function applyToFuture(old, nuova, force) {
+    const today = localToday(), from = today.slice(0, 7) + "-01";
+    const schedule = force || old.ogni_mesi !== nuova.ogni_mesi || old.giorno !== nuova.giorno || old.data_inizio !== nuova.data_inizio ||
       (old.data_fine || null) !== (nuova.data_fine || null);
-    const base = (q) => q.eq("ricorrenza_id", old.id).gte("data_prevista", today).eq("modificata", false).eq("annullata", false);
-    if (schedule) { // elimina le future non modificate: poi verranno rigenerate
-      const { error } = await base(sb.from("ops").delete());
+    const fields = { voce: nuova.voce, conto: nuova.conto, tipo: nuova.tipo, importo: nuova.importo, categoria: nuova.categoria };
+    if (!schedule) {
+      const { error } = await sb.from("ops").update({ ...fields, updated_at: nowIso() })
+        .eq("ricorrenza_id", old.id).gte("data_prevista", from).eq("modificata", false).eq("annullata", false);
       if (error) throw error;
-    } else {
-      const { error } = await base(sb.from("ops").update({
-        voce: nuova.voce, conto: nuova.conto, tipo: nuova.tipo, importo: nuova.importo, categoria: nuova.categoria, updated_at: nowIso(),
-      }));
+      return;
+    }
+    const rows = (await fetchAll(() => sb.from("ops").select("*").eq("ricorrenza_id", old.id).gte("data_prevista", from).order("id"))).map(normOp);
+    const occ = new Map();
+    for (const d of Calc.occurrences(nuova, from, Calc.horizon(nuova, today))) occ.set(d.slice(0, 7), d);
+    const taken = new Set(rows.filter((r) => r.modificata).map((r) => r.data_prevista));
+    const groups = new Map();
+    for (const r of rows) {
+      if (r.modificata) continue;
+      const mk = r.data_prevista.slice(0, 7);
+      if (!groups.has(mk)) groups.set(mk, []);
+      groups.get(mk).push(r);
+    }
+    const del = [], upd = [];
+    for (const [mk, g] of groups) {
+      const nd = occ.get(mk);
+      if (!nd) { g.forEach((r) => { if (r.data_prevista >= today) del.push(r.id); }); continue; }
+      if (taken.has(nd)) { g.forEach((r) => del.push(r.id)); continue; } // c'è già una riga modificata a mano a quella data
+      const keep = g.find((r) => r.data_prevista === nd) || g[0];
+      g.forEach((r) => { if (r !== keep) del.push(r.id); }); // doppioni dello stesso mese
+      upd.push({ id: keep.id, patch: { ...fields, data: nd, data_prevista: nd, updated_at: nowIso() } });
+    }
+    // prima le eliminazioni, così lo spostamento non urta il vincolo (regola, data prevista)
+    for (let i = 0; i < del.length; i += 100) {
+      const { error } = await sb.from("ops").delete().in("id", del.slice(i, i + 100));
+      if (error) throw error;
+    }
+    for (const u of upd) {
+      const { error } = await sb.from("ops").update(u.patch).eq("id", u.id);
       if (error) throw error;
     }
   }
