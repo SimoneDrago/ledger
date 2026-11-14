@@ -32,7 +32,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -930,6 +930,7 @@
 
     // grafico dell'andamento
     if (res.rows.length) h += chartCard(res, state.simChart || (res.goalDef ? res.goalDef.conto : "c1"));
+    if (res.rows.length) h += donutCard(res, state.simChart || (res.goalDef ? res.goalDef.conto : "c1"));
 
     // voci
     h += `<div class="sim-h"><h3>Voci dello scenario</h3><button type="button" class="btn primary sm" data-sact="voce-add">+ Voce</button></div>`;
@@ -981,6 +982,59 @@
         Il calcolo arriva fino a ${fmtData(res.endDate)} e conta solo quello che è registrato: stipendi e spese non ancora inseriti non sono inclusi.</p>`;
     }
     body.innerHTML = h;
+  }
+
+
+  // Ciambella delle uscite di un mese dello scenario: operazioni reali (per categoria) + voci simulate.
+  const simColor = (i) => `hsl(${(268 + i * 24) % 360} 78% ${i % 2 ? 62 : 54}%)`;
+  function donutCard(res, conto) {
+    const rows = res.rows;
+    const has = (r) => r.voci.c1 !== 0 || r.voci.c2 !== 0;
+    if (!rows.some((r) => r.mese === state.simMese)) state.simMese = (rows.find(has) || rows[rows.length - 1]).mese;
+    const mese = state.simMese;
+    const pills = [["c1", "Conto 1"], ["c2", "Conto 2"], ["tot", "Insieme"]]
+      .map(([k, l]) => `<button type="button" class="seg-b" data-sact="chart" data-k="${k}" aria-pressed="${k === conto}">${l}</button>`).join("");
+    const chips = rows.map((r) => `<button type="button" class="mchip${has(r) ? " has" : ""}" data-sact="mese" data-k="${r.mese}" aria-pressed="${r.mese === mese}">${esc(MESI[Number(r.mese.slice(5)) - 1].slice(0, 3))}<small>${r.mese.slice(2, 4)}</small></button>`).join("");
+    const im = Calc.monthImpact(res, mese, conto);
+    const usc = r2(im.uscite.real + im.uscite.sim), ent = r2(im.entrate.real + im.entrate.sim), net = r2(ent - usc);
+    const segs = im.segs;
+    let sel = state.simSeg !== null && segs[state.simSeg] ? state.simSeg : null;
+    let nSim = 0;
+    const cols = segs.map((s) => (s.kind === "sim" ? simColor(nSim++) : catColor(s.label)));
+    let svg;
+    if (usc > 0) {
+      const R = 74, C = 2 * Math.PI * R, gap = segs.length > 1 ? 2.5 : 0;
+      let at = 0;
+      const arcs = segs.map((s, i) => {
+        const len = (s.tot / usc) * C, start = at; at += len;
+        const dim = sel !== null && sel !== i;
+        return `<circle class="dn-seg${dim ? " dim" : ""}${sel === i ? " on" : ""}" cx="100" cy="100" r="${R}" fill="none" stroke="${cols[i]}" stroke-width="30"
+          stroke-dasharray="${Math.max(len - gap, 0.5).toFixed(2)} ${(C - Math.max(len - gap, 0.5)).toFixed(2)}" stroke-dashoffset="${(-start).toFixed(2)}" transform="rotate(-90 100 100)"><title>${esc(s.label)}: ${eur(s.tot)}</title></circle>`;
+      }).join("");
+      const cLabel = sel !== null ? segs[sel].label : "Uscite", cVal = sel !== null ? segs[sel].tot : usc;
+      const cSub = sel !== null ? `${((segs[sel].tot / usc) * 100).toFixed(0)}% del mese` : (im.uscite.sim > 0 ? `di cui scenario ${eur(im.uscite.sim)}` : "nessuna voce simulata");
+      svg = `<svg class="dn" viewBox="0 0 200 200" role="img" aria-label="Uscite di ${esc(fmtMese(mese))}: ${eur(usc)}"><circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--tag)" stroke-width="30"/>${arcs}
+        <text x="100" y="86" text-anchor="middle" class="dn-l">${esc(cLabel.length > 16 ? cLabel.slice(0, 15) + "…" : cLabel)}</text>
+        <text x="100" y="108" text-anchor="middle" class="dn-v">${eur(cVal)}</text>
+        <text x="100" y="125" text-anchor="middle" class="dn-s">${esc(cSub.length > 26 ? cSub.slice(0, 25) + "…" : cSub)}</text></svg>`;
+    } else {
+      svg = `<svg class="dn" viewBox="0 0 200 200" role="img" aria-label="Nessuna uscita"><circle cx="100" cy="100" r="74" fill="none" stroke="var(--tag)" stroke-width="30"/>
+        <text x="100" y="105" text-anchor="middle" class="dn-s">Nessuna uscita</text></svg>`;
+    }
+    const sub = (a, b) => (state.hide ? "" : `<small>reali ${eur(a)} · scenario ${eur(b)}</small>`);
+    const tiles = `<div class="dn-tiles">
+      <div class="dn-t pos"><span>Entrate</span><strong>${mEur(ent)}</strong>${state.hide ? "" : `<small>reali ${eur(im.entrate.real)} · scenario ${eur(im.entrate.sim)}</small>`}</div>
+      <div class="dn-t neg"><span>Uscite</span><strong>${eur(usc)}</strong>${sub(im.uscite.real, im.uscite.sim)}</div>
+      <div class="dn-t net ${net < 0 && !state.hide ? "neg" : "pos"}"><span>Netto del mese</span><strong>${state.hide ? MASK : sgn(net)}</strong>${state.hide ? "" : `<small>${net < 0 ? "escono più soldi di quanti entrano" : "entra più di quanto esce"}</small>`}</div></div>`;
+    const legend = segs.map((s, i) => `<button type="button" class="lg-row${sel === i ? " on" : ""}" data-sact="seg" data-k="${i}" aria-pressed="${sel === i}">
+        <i class="lg-dot" style="background:${cols[i]}"></i>
+        <span class="lg-nm">${s.kind === "real" ? (CAT_ICON[s.label] || "🏷️") + " " : ""}${esc(s.label)}${s.kind === "sim" ? ` <em class="lg-tag">scenario</em>` : ""}<small>${s.n} ${s.n === 1 ? "operazione" : "operazioni"} · ${((s.tot / usc) * 100).toFixed(s.tot / usc < .1 ? 1 : 0).replace(".", ",")}%</small></span>
+        <span class="lg-v">${eur(s.tot)}</span></button>`).join("");
+    return `<div class="sim-h"><h3>Impatto del mese</h3></div>
+      <section class="card donut-card"><div class="seg">${pills}</div>
+      <div class="mchips" role="group" aria-label="Mese">${chips}</div>
+      <div class="dn-wrap">${svg}<div class="dn-legend">${legend || `<p class="empty" style="margin:8px 0">Nessuna uscita in ${esc(fmtMese(mese))}.</p>`}</div></div>${tiles}
+      <p class="note" style="margin-top:8px">${esc(fmtMese(mese))}: operazioni registrate (per categoria) e voci dello scenario. Tocca una voce per isolarla nel centro. I mesi con un puntino hanno movimenti dello scenario.</p></section>`;
   }
 
   const kfmt = (v) => { const a = Math.abs(v); const s = a >= 1000 ? String(r2(a / 1000)).replace(".", ",") + "k" : String(Math.round(a)); return (v < 0 ? "−" : "") + s; };
@@ -1053,7 +1107,9 @@
     const b = e.target.closest("button[data-sact]"); if (!b) return;
     const a = b.dataset.sact, id = b.dataset.id, sc = curScen();
     if (a === "cancel") { state.simConfirm = null; renderSim(); return; }
-    if (a === "chart") { state.simChart = b.dataset.k; renderSim(); return; }
+    if (a === "chart") { state.simChart = b.dataset.k; state.simSeg = null; renderSim(); return; }
+    if (a === "mese") { state.simMese = b.dataset.k; state.simSeg = null; renderSim(); return; }
+    if (a === "seg") { state.simSeg = state.simSeg === Number(b.dataset.k) ? null : Number(b.dataset.k); renderSim(); return; }
     if (a === "voce-add") { openVoce(null); return; }
     if (a === "voce-edit") { openVoce(sc.voci.find((v) => v.id === id)); return; }
     if (a === "voce-del") { state.simConfirm = { type: "voce", id }; renderSim(); return; }

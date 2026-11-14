@@ -169,7 +169,7 @@
     const g0 = sc.obiettivo;
     const goal = g0 && ["c1", "c2", "tot"].includes(g0.conto) && /^\d{4}-\d\d-\d\d$/.test(g0.data || "") && Number.isFinite(Number(g0.minimo)) && g0.minimo !== "" && g0.minimo !== null
       ? { conto: g0.conto, data: g0.data, minimo: Number(g0.minimo) } : null;
-    if (!simOps.length) return { rows: [], goal: null, simCount: 0, goalDef: goal, real, sim };
+    if (!simOps.length) return { rows: [], goal: null, simCount: 0, goalDef: goal, real, sim, simOps: [] };
     // orizzonte: ultima data reale, obiettivo, voci una tantum, e 12 mesi dalla prima data delle voci periodiche
     const cand = [];
     if (real.entries.length) cand.push(real.entries[real.entries.length - 1].o.data);
@@ -192,7 +192,30 @@
       const margine = r2(s - goal.minimo);
       res = { saldoSim: s, saldoReale: r, margine, ok: margine >= 0 };
     }
-    return { rows, goal: res, goalDef: goal, simCount: simOps.length, endDate, minSim: minPoint(sim.entries, cfg, endDate), minReal: minPoint(real.entries, cfg, endDate), real, sim };
+    return { rows, goal: res, goalDef: goal, simOps, simCount: simOps.length, endDate, minSim: minPoint(sim.entries, cfg, endDate), minReal: minPoint(real.entries, cfg, endDate), real, sim };
+  }
+
+  // Entrate e uscite di un mese, divise tra operazioni reali (per categoria) e voci dello scenario.
+  // res: risultato di simulate(); conto: "c1" | "c2" | "tot". Le uscite comuni pesano per la quota del conto.
+  function monthImpact(res, mese, conto) {
+    const eff = (p) => (conto === "tot" ? p.c1 + p.c2 : p[conto]);
+    const out = { entrate: { real: 0, sim: 0 }, uscite: { real: 0, sim: 0 }, segs: [] };
+    const real = new Map(), sim = new Map();
+    const add = (map, key, v, kind) => { const m = map.get(key) || { label: key, kind, tot: 0, n: 0 }; m.tot = r2(m.tot - v); m.n += 1; map.set(key, m); };
+    const scan = (list, kind, map) => {
+      for (const x of list) {
+        if (x.o.data.slice(0, 7) !== mese) continue;
+        const v = r2(eff(x.p));
+        if (v === 0) continue;
+        if (v > 0) out.entrate[kind] = r2(out.entrate[kind] + v);
+        else { out.uscite[kind] = r2(out.uscite[kind] - v); add(map, kind === "real" ? (x.o.categoria || "Senza categoria") : (x.o.voce || "Voce"), v, kind); }
+      }
+    };
+    scan(res.real.entries, "real", real);
+    scan((res.simOps || []).map((o) => ({ o, p: parts(o) })), "sim", sim);
+    const order = (a, b) => b.tot - a.tot || a.label.localeCompare(b.label, "it");
+    out.segs = [...real.values()].sort(order).concat([...sim.values()].sort(order));
+    return out;
   }
 
   // ---------- Spese per categoria ----------
@@ -257,7 +280,7 @@
     return { ticks, min: a, max: b, step };
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, monthImpact, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);

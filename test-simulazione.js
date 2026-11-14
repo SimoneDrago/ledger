@@ -69,3 +69,24 @@ console.log("ok: simulazione");
   assert.strictEqual(apr.sim.c1, mar.sim.c1); // il saldo invece resta più basso
 }
 console.log("movimento mensile OK");
+
+// ciambella: entrate e uscite del mese, reali e di scenario (importi inventati)
+{
+  const o3 = [
+    { ...op("a1", "2026-03-02", "c1", "uscita", 40), categoria: "Spesa" }, { ...op("a2", "2026-03-09", "c1", "uscita", 10), categoria: "Spesa" },
+    { ...op("a3", "2026-03-20", "comune", "uscita", 100), categoria: "Casa" }, op("a4", "2026-03-25", "c1", "entrata", 500),
+    { ...op("a5", "2026-03-26", "c1", "uscita", 999), categoria: "Auto", annullata: true }, { ...op("a6", "2026-04-01", "c1", "uscita", 7), categoria: "Spesa" },
+  ];
+  const sc3 = { voci: [v({ voce: "Caparra", conto: "c1", importo: 5000 }), v({ id: "v2", voce: "Bonus", conto: "c1", tipo: "entrata", importo: 300 })], obiettivo: { conto: "c1", data: "2026-05-31", minimo: 0 } };
+  const r3 = C.simulate(cfg, o3, sc3);
+  const m = C.monthImpact(r3, "2026-03", "c1");
+  assert.deepStrictEqual(m.uscite, { real: 100, sim: 5000 });
+  assert.deepStrictEqual(m.entrate, { real: 500, sim: 300 });
+  assert.deepStrictEqual(m.segs.map((s) => [s.label, s.kind, s.tot, s.n]), [["Casa", "real", 50, 1], ["Spesa", "real", 50, 2], ["Caparra", "sim", 5000, 1]]);
+  const tot = C.monthImpact(r3, "2026-03", "tot");
+  assert.strictEqual(tot.uscite.real, 150); // 40+10 + intera comune 100
+  assert.deepStrictEqual(C.monthImpact(r3, "2026-04", "c1").uscite, { real: 7, sim: 0 });
+  assert.deepStrictEqual(C.monthImpact(r3, "2026-12", "c1").segs, []);
+  assert.strictEqual(JSON.stringify(o3).includes("sim_"), false);
+}
+console.log("ciambella OK");
