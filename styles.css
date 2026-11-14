@@ -82,7 +82,12 @@ tr.tot td { font-weight: 700; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 
 .month { margin-bottom: 16px; }
-.mhead { display: flex; justify-content: space-between; gap: 8px; padding: 6px 4px; font-weight: 700; text-transform: capitalize; }
+.mhead { display: flex; justify-content: space-between; gap: 8px; padding: 6px 4px; font-weight: 700; text-transform: capitalize; width: 100%; background: none; border: 0; color: inherit; font-family: inherit; font-size: inherit; text-align: left; }
+button.mhead { cursor: pointer; min-height: 44px; align-items: center; border-radius: 8px; }
+button.mhead:hover { background: var(--tag); }
+.mhead .tot { text-align: right; }
+.chev { display: inline-block; width: 1.1em; color: var(--muted); }
+.mbar { display: flex; gap: 8px; margin-bottom: 8px; }
 .mhead .tot { font-weight: 400; color: var(--muted); font-size: .85rem; text-transform: none; }
 .mfoot { text-align: right; color: var(--muted); font-size: .85rem; padding: 6px 4px; }
 ul.rows { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }

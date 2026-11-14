@@ -22,7 +22,7 @@
   const state = {
     cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
-    userId: null, recovery: false, confirmDel: null, confirmRule: null,
+    open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
   };
 
@@ -127,6 +127,7 @@
     }
     try { await load(); } catch (e) { showView("app"); await handleError(e, "Caricamento non riuscito. Controlla la connessione e riprova."); return; }
     state.scenId = lsGet("conti-scen");
+    state.open = loadOpen();
     const saved = lsGet("conti-tab");
     if (saved === "c1" || saved === "c2" || saved === "comune") state.tab = saved;
     showView("app"); render();
@@ -282,6 +283,11 @@
     const months = groupByMonth(arr);
     let h = tab === "comune" ? "" : `<div class="month"><div class="mhead"><span>Saldo di partenza · ${fmtData(state.cfg.dataInizio)}</span><span>${eur(state.cfg[tab].iniziale)}</span></div></div>`;
     if (!months.size) h += `<p class="empty">Nessuna operazione.</p>`;
+    else h += `<div class="mbar"><button type="button" class="btn sm" data-mall="open">Espandi tutto</button><button type="button" class="btn sm" data-mall="close">Comprimi tutto</button></div>`;
+    // di default è aperto solo il mese corrente (o il primo successivo, altrimenti l'ultimo)
+    const keys = [...months.keys()], tm = localToday().slice(0, 7);
+    const def = keys.includes(tm) ? tm : (keys.find((k) => k > tm) || keys[keys.length - 1]);
+    const isOpen = (k) => (state.open ? state.open.has(k) : k === def);
     for (const [k, es] of months) {
       let ent = 0, usc = 0, last = null;
       for (const e of es) {
@@ -292,11 +298,19 @@
       }
       const tot = tab === "comune" ? `uscite ${eur(usc)}` : `entrate ${eur(ent)} · uscite ${eur(usc)}`;
       const foot = tab === "comune" || !last ? "" : `<div class="mfoot">Saldo fine mese: <strong>${eur(last.b[tab])}</strong></div>`;
-      h += `<div class="month"><div class="mhead"><span>${fmtMese(k)}</span><span class="tot">${tot}</span></div>
-        <ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}</div>`;
+      const open = isOpen(k);
+      const saldo = tab === "comune" || !last ? "" : ` · saldo ${eur(last.b[tab])}`;
+      h += `<div class="month"><button type="button" class="mhead" data-month="${k}" aria-expanded="${open}">
+          <span><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span> ${fmtMese(k)}</span><span class="tot">${tot}${open ? "" : saldo}</span></button>
+        ${open ? `<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
     }
     $("#list").innerHTML = h;
   }
+  // mesi aperti: ricordati su questo dispositivo (null = predefinito)
+  function loadOpen() {
+    try { const v = JSON.parse(lsGet("conti-open") || "null"); return Array.isArray(v) ? new Set(v) : null; } catch { return null; }
+  }
+  function setOpen(set) { state.open = set; lsSet("conti-open", JSON.stringify([...set])); renderList(); }
 
   // ---------- eventi: schede, azioni, righe ----------
   function setTab(t) { state.tab = t; state.confirmDel = null; lsSet("conti-tab", t); render(); }
@@ -315,6 +329,18 @@
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
 
   $("#list").addEventListener("click", async (e) => {
+    const mo = e.target.closest("[data-month]");
+    if (mo) {
+      const k = mo.dataset.month, cur = state.open ? new Set(state.open) : new Set([...document.querySelectorAll("#list button.mhead[aria-expanded=true]")].map((x) => x.dataset.month));
+      if (cur.has(k)) cur.delete(k); else cur.add(k);
+      setOpen(cur); return;
+    }
+    const all = e.target.closest("[data-mall]");
+    if (all) {
+      const keys = [...document.querySelectorAll("#list button.mhead")].map((x) => x.dataset.month);
+      setOpen(new Set(all.dataset.mall === "open" ? [...(state.open || []), ...keys] : []));
+      return;
+    }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const act = b.dataset.act, id = b.dataset.id;
     if (act === "edit") openOp(state.ops.find((o) => o.id === id));
