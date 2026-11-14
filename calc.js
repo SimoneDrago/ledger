@@ -179,7 +179,12 @@
     const first = simOps.reduce((a, o) => (o.data < a ? o.data : a), simOps[0].data);
     const rows = [];
     for (let cur = monthEndPlus(first, -1); cur <= endDate; cur = monthEndPlus(cur, 1)) {
-      rows.push({ mese: cur.slice(0, 7), real: balanceAt(real.entries, cfg, cur), sim: balanceAt(sim.entries, cfg, cur) });
+      const mese = cur.slice(0, 7);
+      // movimento del mese: uscite reali registrate (solo quelle in negativo) e effetto netto delle voci dello scenario
+      const spese = { c1: 0, c2: 0 }, vs = { c1: 0, c2: 0 };
+      for (const e of real.entries) if (e.o.data.slice(0, 7) === mese) for (const k of ["c1", "c2"]) if (e.p[k] < 0) spese[k] = r2(spese[k] + e.p[k]);
+      for (const o of simOps) if (o.data.slice(0, 7) === mese) { const p = parts(o); vs.c1 = r2(vs.c1 + p.c1); vs.c2 = r2(vs.c2 + p.c2); }
+      rows.push({ mese, real: balanceAt(real.entries, cfg, cur), sim: balanceAt(sim.entries, cfg, cur), spese, voci: vs });
     }
     let res = null;
     if (goal) {

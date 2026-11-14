@@ -55,3 +55,17 @@ assert.strictEqual(en.goal.saldoSim, 5000 + 1500 - 50 + 300);
 assert.strictEqual(C.simulate(cfg, ops, { voci: [v({})], obiettivo: { conto: "c1", data: "", minimo: 100 } }).goal, null);
 assert.strictEqual(C.simulate(cfg, ops, { voci: [v({})] }).goal, null);
 console.log("ok: simulazione");
+
+// movimento mensile: spese reali registrate e voci dello scenario (importi inventati)
+{
+  const o2 = [op("e", "2026-03-02", "c1", "uscita", 40), op("f", "2026-03-20", "comune", "uscita", 100), op("g", "2026-03-25", "c1", "entrata", 500), { ...op("h", "2026-03-26", "c1", "uscita", 999), annullata: true }];
+  const s2 = C.simulate(cfg, o2, { voci: [v({ conto: "c1", importo: 5000 })], obiettivo: { conto: "c1", data: "2026-05-31", minimo: 0 } });
+  const mar = s2.rows.find((x) => x.mese === "2026-03");
+  assert.deepStrictEqual(mar.spese, { c1: -90, c2: -50 }); // 40 + metà di 100; entrate e annullate escluse
+  assert.deepStrictEqual(mar.voci, { c1: -5000, c2: 0 });
+  const apr = s2.rows.find((x) => x.mese === "2026-04");
+  assert.deepStrictEqual(apr.spese, { c1: 0, c2: 0 });
+  assert.deepStrictEqual(apr.voci, { c1: 0, c2: 0 }); // la caparra non si ripete nei mesi dopo
+  assert.strictEqual(apr.sim.c1, mar.sim.c1); // il saldo invece resta più basso
+}
+console.log("movimento mensile OK");

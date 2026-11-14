@@ -967,16 +967,17 @@
         return gd.conto === k && s < gd.minimo;
       };
       const cell = (v, extra) => `<td class="${state.hide ? "" : (v < 0 ? "neg-cell " : "") + (extra || "")}">${mEur(v)}</td>`;
-      const dif = (a, b) => { const d = r2(b - a); return `<td>${d === 0 ? "—" : sgnPriv(d)}</td>`; };
+      const mv = (v) => `<td>${v === 0 ? "—" : sgnPriv(v)}</td>`;
+      const spesa = (v) => `<td>${v === 0 ? "—" : eur(v)}</td>`;
       h += `<div class="sim-h"><h3>Mese per mese</h3></div>
-        <section class="card scroll"><table><thead><tr><th>Fine mese</th>
-          <th>${esc(cname("c1"))} reale</th><th>con scenario</th><th>diff.</th>
-          <th>${esc(cname("c2"))} reale</th><th>con scenario</th><th>diff.</th></tr></thead><tbody>` +
+        <section class="card scroll"><table><thead><tr><th rowspan="2">Mese</th>
+          <th colspan="3">${esc(cname("c1"))}</th><th colspan="3">${esc(cname("c2"))}</th></tr>
+          <tr><th>spese</th><th>scenario</th><th>saldo</th><th>spese</th><th>scenario</th><th>saldo</th></tr></thead><tbody>` +
         res.rows.map((r) => `<tr class="${goalMonth === r.mese ? "goal-row" : ""}"><td>${fmtMese(r.mese)}</td>
-          ${cell(r.real.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}${dif(r.real.c1, r.sim.c1)}
-          ${cell(r.real.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}${dif(r.real.c2, r.sim.c2)}</tr>`).join("") +
+          ${spesa(r.spese.c1)}${mv(r.voci.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}
+          ${spesa(r.spese.c2)}${mv(r.voci.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}</tr>`).join("") +
         `</tbody></table></section>
-        <p class="note">Punto più basso con lo scenario: ${esc(cname("c1"))} <strong>${mEur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(cname("c2"))} <strong>${mEur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
+        <p class="note">Per ogni mese: «spese» = uscite già registrate, «scenario» = effetto delle voci simulate, «saldo» = fine mese con lo scenario.<br>Punto più basso con lo scenario: ${esc(cname("c1"))} <strong>${mEur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(cname("c2"))} <strong>${mEur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
         Il calcolo arriva fino a ${fmtData(res.endDate)} e conta solo quello che è registrato: stipendi e spese non ancora inseriti non sono inclusi.</p>`;
     }
     body.innerHTML = h;
