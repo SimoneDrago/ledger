@@ -409,8 +409,19 @@
   function markNav(view) {
     const i = VIEW_ORDER.indexOf(view);
     document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === view ? "page" : "false"));
-    $("#bnav").style.setProperty("--i", String(Math.max(0, i)));
+    $("#bnav").style.setProperty("--i", String([0, 1, 3, 4][Math.max(0, i)]));
+    // il "+" compie l'azione di creazione della pagina in cui ti trovi
+    const add = $("#bnav-add");
+    if (add) {
+      const label = view === "rules" ? "Nuova ricorrenza" : view === "sim" ? (curScen() ? "Nuova voce dello scenario" : "Nuovo scenario") : "Aggiungi operazione";
+      add.setAttribute("aria-label", label); add.title = label;
+    }
   }
+  $("#bnav-add").addEventListener("click", () => {
+    if (state.view === "rules") openRule(null, null);
+    else if (state.view === "sim") { if (curScen()) openVoce(null); else openScen(null); }
+    else openOp(null);
+  });
   function go(view) {
     if (view === state.view) { window.scrollTo(0, 0); return; }
     const dir = VIEW_ORDER.indexOf(view) > VIEW_ORDER.indexOf(state.view) ? "fwd" : "back";

@@ -440,3 +440,21 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
 .row .a .sub { overflow-wrap: anywhere; text-align: right; }
 .row .v { overflow-wrap: break-word; word-break: normal; hyphens: auto; }
 .sub.split { margin-top: 3px; line-height: 1.35; }
+
+/* ----- pulsante "+" rialzato al centro della barra ----- */
+.bnav-add { display: none; }
+@media (max-width: 640px) {
+  .bnav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; overflow: visible; }
+  .bnav-ind { width: calc((100% - 12px) / 5); }
+  .bnav .bnav-add {
+    display: grid; place-items: center; justify-self: center; align-self: center; z-index: 2;
+    width: 58px; height: 58px; min-height: 58px; padding: 0; margin-top: -26px; flex: none;
+    border-radius: 50%; border: 1px solid rgba(255, 255, 255, .55); color: #fff; cursor: pointer;
+    background: var(--grad);
+    box-shadow: 0 14px 26px -8px rgba(79, 70, 229, .75), 0 0 0 5px color-mix(in srgb, var(--bg) 55%, transparent), inset 0 1.5px 0 rgba(255, 255, 255, .45);
+    transition: transform .3s cubic-bezier(.3, 1.6, .5, 1), box-shadow .2s;
+  }
+  .bnav .bnav-add svg { transition: transform .35s cubic-bezier(.3, 1.6, .5, 1); }
+  .bnav .bnav-add:active { transform: scale(.9); }
+  .bnav .bnav-add:active svg { transform: rotate(90deg); }
+}
