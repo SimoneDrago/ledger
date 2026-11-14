@@ -12,6 +12,11 @@
   // Modalità privacy: saldi, entrate e stipendi diventano asterischi; le uscite restano visibili.
   const MASK = "***** €";
   function mEur(n) { return state.hide ? MASK : eur(n); }
+  // Nome del conto da mostrare: con l'occhio attivo le parentesi con numeri (es. lo stipendio) diventano (*****).
+  function cname(k) {
+    const n = state.cfg[k].nome;
+    return state.hide ? n.replace(/\([^)]*\d[^)]*\)/g, "(*****)") : n;
+  }
   function sgnPriv(n) { return state.hide && n > 0 ? MASK : sgn(n); }
   const hiddenWarn = (what) => { toast(`Mostra i dati (icona occhio) per modificare ${what}.`); };
   const isEntrata = (x) => !!x && x.conto !== "comune" && x.tipo === "entrata";
@@ -192,14 +197,14 @@
   });
 
   // ---------- rendering ----------
-  const nomeConto = (k) => (k === "comune" ? "Conto comune" : state.cfg[k].nome);
+  const nomeConto = (k) => (k === "comune" ? "Conto comune" : cname(k));
 
   function render() {
     const { cfg, tab } = state;
     $("#subtitle").textContent = `Dal ${fmtData(cfg.dataInizio)} · ${state.entries.length} operazioni`;
-    $("#tab-c1").textContent = cfg.c1.nome; $("#tab-c2").textContent = cfg.c2.nome;
+    $("#tab-c1").textContent = cname("c1"); $("#tab-c2").textContent = cname("c2");
     document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-    $("#btn-add").textContent = tab === "comune" ? "+ Aggiungi uscita comune" : `+ Aggiungi a ${cfg[tab].nome}`;
+    $("#btn-add").textContent = tab === "comune" ? "+ Aggiungi uscita comune" : `+ Aggiungi a ${cname(tab)}`;
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
@@ -221,7 +226,7 @@
     const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
     const personal = (k) => `<button type="button" class="card sum ${state.tab === k ? "active" : ""}" data-tab="${k}">
-      <span class="t">${esc(state.cfg[k].nome)} · oggi</span><span class="big">${mEur(now[k])}</span>
+      <span class="t">${esc(cname(k))} · oggi</span><span class="big">${mEur(now[k])}</span>
       <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span></button>`;
     $("#cards").innerHTML = personal("c1") + personal("c2") +
       `<button type="button" class="card sum ${state.tab === "comune" ? "active" : ""}" data-tab="comune">
@@ -250,8 +255,8 @@
         t += s; a += q1; b += q2;
         return `<tr><td>${fmtMese(k)}</td><td>${eur(s)}</td><td>${eur(q1)}</td><td>${eur(q2)}</td></tr>`;
       }).join("");
-      h = `<p class="note">Ogni uscita qui viene divisa a metà e tolta da ${esc(state.cfg.c1.nome)} e ${esc(state.cfg.c2.nome)}.</p>
-        <table><thead><tr><th>Mese</th><th>Uscite comuni</th><th>${esc(state.cfg.c1.nome)}</th><th>${esc(state.cfg.c2.nome)}</th></tr></thead>
+      h = `<p class="note">Ogni uscita qui viene divisa a metà e tolta da ${esc(cname("c1"))} e ${esc(cname("c2"))}.</p>
+        <table><thead><tr><th>Mese</th><th>Uscite comuni</th><th>${esc(cname("c1"))}</th><th>${esc(cname("c2"))}</th></tr></thead>
         <tbody>${rows}<tr class="tot"><td>Totale</td><td>${eur(t)}</td><td>${eur(a)}</td><td>${eur(b)}</td></tr></tbody></table>`;
     } else {
       const months = groupByMonth(state.entries.filter((e) => e.o.conto === tab || e.o.conto === "comune"));
@@ -274,7 +279,7 @@
     let amt, cls, sub;
     if (tab === "comune") {
       amt = -o.importo; cls = "neg";
-      sub = `${esc(state.cfg.c1.nome)} ${eur(-e.p.c1)} · ${esc(state.cfg.c2.nome)} ${eur(-e.p.c2)}`;
+      sub = `${esc(cname("c1"))} ${eur(-e.p.c1)} · ${esc(cname("c2"))} ${eur(-e.p.c2)}`;
     } else {
       amt = e.p[tab]; cls = amt >= 0 ? "pos" : "neg";
       sub = (comune ? `metà di ${eur(o.importo)}` : "");
@@ -408,13 +413,13 @@
     $("#f-tipo-wrap").hidden = comune;
     const imp = parseImporto($("#f-importo").value);
     $("#f-preview").textContent = comune && imp > 0
-      ? `Verrà tolto ${eur(r2(imp / 2))} da ${state.cfg.c1.nome} e ${eur(r2(imp - r2(imp / 2)))} da ${state.cfg.c2.nome}.` : "";
+      ? `Verrà tolto ${eur(r2(imp / 2))} da ${cname("c1")} e ${eur(r2(imp - r2(imp / 2)))} da ${cname("c2")}.` : "";
   }
   function openOp(op) {
     if (state.hide && isEntrata(op)) { hiddenWarn("le entrate"); return; }
     state.editing = op;
     const { cfg } = state;
-    fConto.options[0].textContent = cfg.c1.nome; fConto.options[1].textContent = cfg.c2.nome;
+    fConto.options[0].textContent = cname("c1"); fConto.options[1].textContent = cname("c2");
     fillCats("#cat-list");
     $("#op-title").textContent = op ? "Modifica operazione" : "Nuova operazione";
     fConto.value = op ? op.conto : state.tab;
@@ -488,7 +493,7 @@
   function openStart() {
     if (state.hide) { hiddenWarn("i saldi di partenza"); return; }
     const { cfg } = state;
-    $("#s-data").value = cfg.dataInizio; $("#s-n1").value = cfg.c1.nome; $("#s-n2").value = cfg.c2.nome;
+    $("#s-data").value = cfg.dataInizio; $("#s-n1").value = cname("c1"); $("#s-n2").value = cname("c2");
     $("#s-i1").value = String(cfg.c1.iniziale).replace(".", ","); $("#s-i2").value = String(cfg.c2.iniziale).replace(".", ",");
     $("#start-msg").textContent = ""; $("#start-save").disabled = false;
     $("#dlg-start").showModal();
@@ -626,7 +631,7 @@
     if (state.hide && (isEntrata(rule) || isEntrata(fromOp))) { hiddenWarn("le entrate"); return; }
     state.editingRule = rule || null; state.linkOp = fromOp || null; state.ruleDraft = null;
     const { cfg } = state;
-    rConto.options[0].textContent = cfg.c1.nome; rConto.options[1].textContent = cfg.c2.nome;
+    rConto.options[0].textContent = cname("c1"); rConto.options[1].textContent = cname("c2");
     fillCats("#cat-list");
     const src = rule || fromOp;
     $("#rule-title").textContent = rule ? "Modifica ricorrenza" : "Nuova ricorrenza";
@@ -815,13 +820,13 @@
       const dif = (a, b) => { const d = r2(b - a); return `<td>${d === 0 ? "—" : sgnPriv(d)}</td>`; };
       h += `<div class="sim-h"><h3>Mese per mese</h3></div>
         <section class="card scroll"><table><thead><tr><th>Fine mese</th>
-          <th>${esc(n.c1.nome)} reale</th><th>con scenario</th><th>diff.</th>
-          <th>${esc(n.c2.nome)} reale</th><th>con scenario</th><th>diff.</th></tr></thead><tbody>` +
+          <th>${esc(cname("c1"))} reale</th><th>con scenario</th><th>diff.</th>
+          <th>${esc(cname("c2"))} reale</th><th>con scenario</th><th>diff.</th></tr></thead><tbody>` +
         res.rows.map((r) => `<tr class="${goalMonth === r.mese ? "goal-row" : ""}"><td>${fmtMese(r.mese)}</td>
           ${cell(r.real.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}${dif(r.real.c1, r.sim.c1)}
           ${cell(r.real.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}${dif(r.real.c2, r.sim.c2)}</tr>`).join("") +
         `</tbody></table></section>
-        <p class="note">Punto più basso con lo scenario: ${esc(n.c1.nome)} <strong>${mEur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(n.c2.nome)} <strong>${mEur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
+        <p class="note">Punto più basso con lo scenario: ${esc(cname("c1"))} <strong>${mEur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(cname("c2"))} <strong>${mEur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
         Il calcolo arriva fino a ${fmtData(res.endDate)} e conta solo quello che è registrato: stipendi e spese non ancora inseriti non sono inclusi.</p>`;
     }
     body.innerHTML = h;
@@ -861,7 +866,7 @@
   const scConto = $("#sc-conto");
   function openScen(sc) {
     editingScen = sc;
-    scConto.options[0].textContent = state.cfg.c1.nome; scConto.options[1].textContent = state.cfg.c2.nome;
+    scConto.options[0].textContent = cname("c1"); scConto.options[1].textContent = cname("c2");
     $("#scen-title").textContent = sc ? "Nome e obiettivo" : "Nuovo scenario";
     $("#sc-nome").value = sc ? sc.nome : "";
     const g = sc && sc.obiettivo;
@@ -929,7 +934,7 @@
     let txt = "";
     if (okDate && v.importo > 0) {
       const imp = v.importo;
-      if (v.conto === "comune") txt = `Divisa: ${eur(r2(imp / 2))} su ${state.cfg.c1.nome} e ${eur(r2(imp - r2(imp / 2)))} su ${state.cfg.c2.nome}. `;
+      if (v.conto === "comune") txt = `Divisa: ${eur(r2(imp / 2))} su ${cname("c1")} e ${eur(r2(imp - r2(imp / 2)))} su ${cname("c2")}. `;
       if (v.ogni_mesi > 0 && Number.isInteger(v.volte) && v.volte >= 1 && v.volte <= 600 && Number.isInteger(v.ogni_mesi) && v.ogni_mesi <= 24) {
         const last = Calc.expandVoce({ ...v, id: "p" }).pop().data;
         txt += `Totale ${eur(imp * v.volte)} in ${v.volte} volte, fino al ${fmtData(last)}.`;
@@ -951,7 +956,7 @@
   function openVoce(v) {
     if (state.hide && isEntrata(v)) { hiddenWarn("le entrate"); return; }
     editingVoce = v || null;
-    vConto.options[0].textContent = state.cfg.c1.nome; vConto.options[1].textContent = state.cfg.c2.nome;
+    vConto.options[0].textContent = cname("c1"); vConto.options[1].textContent = cname("c2");
     $("#voce-title").textContent = v ? "Modifica voce" : "Nuova voce";
     $("#v-tpl").value = ""; $("#v-tpl").hidden = !!v; document.querySelector('label[for="v-tpl"]').hidden = !!v;
     vConto.value = v ? v.conto : "comune";
@@ -1002,7 +1007,7 @@
   function renderCat() {
     const { cfg } = state, today = localToday(), tm = today.slice(0, 7);
     const sel = $("#cat-conto");
-    sel.options[0].textContent = `${cfg.c1.nome} + ${cfg.c2.nome}`; sel.options[1].textContent = cfg.c1.nome; sel.options[2].textContent = cfg.c2.nome;
+    sel.options[0].textContent = `${cname("c1")} + ${cname("c2")}`; sel.options[1].textContent = cname("c1"); sel.options[2].textContent = cname("c2");
     sel.value = state.catConto;
     // periodi: tutto il periodo + ogni mese con operazioni
     const keys = [...new Set(state.entries.map((e) => e.o.data.slice(0, 7)))].sort();
