@@ -190,7 +190,28 @@
     return { rows, goal: res, goalDef: goal, simCount: simOps.length, endDate, minSim: minPoint(sim.entries, cfg, endDate), minReal: minPoint(real.entries, cfg, endDate), real, sim };
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate };
+  // ---------- Spese per categoria ----------
+  // entries: righe di compute().entries (annullate escluse). conto: "c1" | "c2" | "tot".
+  // Le uscite comuni pesano per la quota del conto (metà), come nei saldi.
+  function categorySummary(entries, conto, from, to) {
+    const eff = (e) => (conto === "tot" ? e.p.c1 + e.p.c2 : e.p[conto]);
+    const map = new Map();
+    let uscite = 0, entrate = 0;
+    for (const e of entries) {
+      if (e.o.data < from || e.o.data > to) continue;
+      const v = r2(eff(e));
+      if (v === 0) continue;
+      if (v > 0) { entrate = r2(entrate + v); continue; }
+      const k = e.o.categoria || "Senza categoria";
+      const m = map.get(k) || { cat: k, tot: 0, n: 0 };
+      m.tot = r2(m.tot - v); m.n += 1; map.set(k, m);
+      uscite = r2(uscite - v);
+    }
+    const rows = [...map.values()].sort((a, b) => b.tot - a.tot || a.cat.localeCompare(b.cat, "it"));
+    return { uscite, entrate, rows };
+  }
+
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, categorySummary };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);

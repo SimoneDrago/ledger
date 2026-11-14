@@ -61,6 +61,7 @@
     <div class="actions">
       <button class="btn primary" id="btn-add" type="button"></button>
       <button class="btn" id="btn-rules" type="button">🔁 Ricorrenti</button>
+      <button class="btn" id="btn-cat" type="button">📊 Categorie</button>
       <button class="btn" id="btn-sim" type="button">🧪 Simulazione</button>
       <button class="btn" id="btn-start" type="button">Saldi di partenza</button>
       <button class="btn" id="btn-csv" type="button">Copia CSV</button>
@@ -78,6 +79,25 @@
       </div>
       <p class="note">Ogni regola crea da sola le operazioni dei prossimi 12 mesi. Ogni operazione creata si può modificare o eliminare singolarmente.</p>
       <ul class="rows" id="rules-list"></ul>
+    </div>
+
+    <div id="cat-view" hidden>
+      <div class="rules-head">
+        <button class="btn" id="cat-back" type="button">← Indietro</button>
+        <h2>Spese per categoria</h2>
+        <span aria-hidden="true"></span>
+      </div>
+      <div class="cat-ctl">
+        <label class="visually-hidden" for="cat-conto">Conto</label>
+        <select id="cat-conto">
+          <option value="tot"></option>
+          <option value="c1"></option>
+          <option value="c2"></option>
+        </select>
+        <label class="visually-hidden" for="cat-per">Periodo</label>
+        <select id="cat-per"></select>
+      </div>
+      <div id="cat-body"></div>
     </div>
 
     <div id="sim-view" hidden>

@@ -21,7 +21,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -184,20 +184,30 @@
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
+    $("#cat-view").hidden = state.view !== "cat";
+    if (state.view === "cat") { renderCat(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
     renderCards(); renderMonthly(); renderList();
   }
 
   function renderCards() {
-    const tot = state.entries.filter((e) => e.o.conto === "comune").reduce((s, e) => s + e.o.importo, 0);
+    // Il numero grande è il saldo di OGGI; la proiezione (dopo l'ultima operazione registrata) è in piccolo.
+    const today = localToday();
+    const now = Calc.balanceAt(state.entries, state.cfg, today);
+    const lastDate = state.entries.length ? state.entries[state.entries.length - 1].o.data : null;
+    const future = lastDate && lastDate > today;
+    const proj = (k) => (future ? `fine ${fmtMese(lastDate.slice(0, 7))}: ${eur(state.cur[k])}` : "");
+    const comuni = state.entries.filter((e) => e.o.conto === "comune");
+    const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
+    const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
     const personal = (k) => `<button type="button" class="card sum ${state.tab === k ? "active" : ""}" data-tab="${k}">
-      <span class="t">${esc(state.cfg[k].nome)}</span><span class="big">${eur(state.cur[k])}</span>
-      <span class="s">partenza ${eur(state.cfg[k].iniziale)} · minimo ${eur(state.min[k])}</span></button>`;
+      <span class="t">${esc(state.cfg[k].nome)} · oggi</span><span class="big">${eur(now[k])}</span>
+      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${eur(state.min[k])}</span></button>`;
     $("#cards").innerHTML = personal("c1") + personal("c2") +
       `<button type="button" class="card sum ${state.tab === "comune" ? "active" : ""}" data-tab="comune">
-      <span class="t">Conto comune · uscite</span><span class="big">${eur(tot)}</span>
-      <span class="s">a testa ${eur(tot / 2)} · totale due conti ${eur(state.cur.c1 + state.cur.c2)}</span></button>`;
+      <span class="t">Conto comune · uscite finora</span><span class="big">${eur(totOggi)}</span>
+      <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${eur(now.c1 + now.c2)}</span></button>`;
   }
 
   function groupByMonth(arr) {
@@ -958,6 +968,59 @@
     if (!ok) { msg.textContent = "Salvataggio non riuscito. Controlla la connessione e riprova."; return; }
     $("#dlg-voce").close(); renderSim();
   });
+
+  // ---------- spese per categoria ----------
+  const catColor = (name) => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 62% 52%)`; };
+  $("#btn-cat").addEventListener("click", () => { state.view = "cat"; render(); window.scrollTo(0, 0); });
+  $("#cat-back").addEventListener("click", () => { state.view = "main"; render(); });
+  $("#cat-conto").addEventListener("change", (e) => { state.catConto = e.target.value; renderCat(); });
+  $("#cat-per").addEventListener("change", (e) => { state.catPer = e.target.value; renderCat(); });
+
+  function renderCat() {
+    const { cfg } = state, today = localToday(), tm = today.slice(0, 7);
+    const sel = $("#cat-conto");
+    sel.options[0].textContent = `${cfg.c1.nome} + ${cfg.c2.nome}`; sel.options[1].textContent = cfg.c1.nome; sel.options[2].textContent = cfg.c2.nome;
+    sel.value = state.catConto;
+    // periodi: tutto il periodo + ogni mese con operazioni
+    const keys = [...new Set(state.entries.map((e) => e.o.data.slice(0, 7)))].sort();
+    if (state.catPer !== "all" && !keys.includes(state.catPer)) state.catPer = keys.includes(tm) ? tm : (keys.find((k) => k > tm) || keys[keys.length - 1] || "all");
+    $("#cat-per").innerHTML = `<option value="all">Tutto il periodo</option>` +
+      keys.map((k) => `<option value="${k}">${fmtMese(k)}${k > tm ? " (previsto)" : ""}</option>`).join("");
+    $("#cat-per").value = state.catPer;
+
+    const per = state.catPer, conto = state.catConto;
+    const range = per === "all" ? ["0000-01-01", "9999-12-31"] : [`${per}-01`, `${per}-31`];
+    const cur = Calc.categorySummary(state.entries, conto, range[0], range[1]);
+    let prev = null, prevKey = null;
+    if (per !== "all") {
+      prevKey = Calc.monthEndPlus(`${per}-01`, -1).slice(0, 7);
+      prev = Calc.categorySummary(state.entries, conto, `${prevKey}-01`, `${prevKey}-31`);
+    }
+    const body = $("#cat-body");
+    if (!cur.rows.length) { body.innerHTML = `<p class="empty">Nessuna spesa nel periodo.</p>`; return; }
+    const prevMap = prev ? new Map(prev.rows.map((r) => [r.cat, r.tot])) : null;
+    const dTot = prev && prev.uscite > 0 ? r2(cur.uscite - prev.uscite) : null;
+    const saldo = r2(cur.entrate - cur.uscite);
+    let h = `<div class="card cat-sum"><div class="lbl">Uscite${per !== "all" && per > tm ? " previste" : ""} · ${per === "all" ? "tutto il periodo" : fmtMese(per)}</div>
+      <div class="big">${eur(cur.uscite)}</div>
+      <div class="line"><span>Entrate <strong>${eur(cur.entrate)}</strong></span><span>Differenza <strong>${sgn(saldo)}</strong></span>
+      ${dTot !== null ? `<span>${dTot > 0 ? "▲" : dTot < 0 ? "▼" : "="} <strong>${eur(Math.abs(dTot))}</strong> rispetto a ${fmtMese(prevKey)}</span>` : ""}</div></div>
+      <div class="card" style="padding:6px 12px">`;
+    h += cur.rows.map((r) => {
+      const share = cur.uscite > 0 ? (r.tot / cur.uscite) * 100 : 0;
+      let delta = "";
+      if (prevMap) {
+        const before = prevMap.get(r.cat) || 0, d = r2(r.tot - before);
+        if (prevMap.has(r.cat) && d !== 0) delta = `<small class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${eur(Math.abs(d))}</small>`;
+        else if (!prevMap.has(r.cat)) delta = `<small>nuova</small>`;
+      }
+      return `<div class="catrow"><div class="top2"><div class="av2" aria-hidden="true">${CAT_ICON[r.cat] || "🏷️"}</div>
+        <div class="nm">${esc(r.cat)}<small>${r.n} ${r.n === 1 ? "operazione" : "operazioni"} · ${share.toFixed(share < 10 ? 1 : 0).replace(".", ",")}%</small></div>
+        <div class="vl">${eur(r.tot)}${delta}</div></div>
+        <div class="bar" role="img" aria-label="${esc(r.cat)}: ${share.toFixed(0)}% delle uscite"><i style="width:${Math.max(share, 1.5).toFixed(1)}%;background:${catColor(r.cat)}"></i></div></div>`;
+    }).join("");
+    body.innerHTML = h + `</div><p class="note" style="margin-top:10px">Le uscite comuni contano per la quota di ciascun conto (metà). Le operazioni annullate sono escluse.</p>`;
+  }
 
   // ---------- CSV ----------
   async function copyCsv() {
