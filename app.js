@@ -30,7 +30,7 @@
   const views = ["loading", "login", "recovery", "app"];
   function showView(name) {
     views.forEach((v) => { $("#view-" + v).hidden = v !== name; });
-    document.title = name === "app" ? "Conti casa" : "Accesso";
+    document.title = name === "app" ? "Ledger" : "Accesso";
   }
   let toastTimer;
   function toast(msg) {
