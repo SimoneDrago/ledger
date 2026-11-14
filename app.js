@@ -26,13 +26,13 @@
   const pad = (n) => String(n).padStart(2, "0");
   // Data di oggi nel fuso locale, come stringa YYYY-MM-DD (niente toISOString: sarebbe UTC)
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-  const CAT_ICON = { Stipendio: "💼", Auto: "🚗", "Università": "🎓", Abbonamenti: "📺", Telefono: "📱", Spesa: "🛒", Varie: "✨", "Acquisto casa": "🏠", Casa: "🛋️", Lavori: "🔨", Utenze: "💡", Altro: "📌" };
+  const CAT_ICON = { Stipendio: "💼", Auto: "🚗", "Università": "🎓", Abbonamenti: "📺", Telefono: "📱", Spesa: "🛒", Varie: "✨", "Acquisto casa": "🏠", Casa: "🛋️", Lavori: "🔨", Utenze: "💡", Altro: "📌", Rettifica: "⚖️" };
   const BASE_CAT = ["Stipendio", "Auto", "Università", "Abbonamenti", "Telefono", "Spesa", "Varie", "Acquisto casa", "Casa", "Lavori", "Utenze", "Altro"];
   const DEFAULT_CFG = { c1: { nome: "Conto 1", iniziale: 0 }, c2: { nome: "Conto 2", iniziale: 0 }, dataInizio: localToday() };
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, riconc: { c1: [], c2: [] }, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -85,14 +85,18 @@
   const normRule = (r) => ({ ...r, importo: Number(r.importo), ogni_mesi: Number(r.ogni_mesi), giorno: Number(r.giorno), data_fine: r.data_fine || null, attiva: r.attiva !== false });
 
   async function load() {
-    const [c, sc, ops, rules] = await Promise.all([
+    const [c, sc, rc, ops, rules] = await Promise.all([
       sb.from("config").select("dati").eq("id", "conti").maybeSingle(),
       sb.from("config").select("dati").eq("id", "scenari").maybeSingle(),
+      sb.from("config").select("dati").eq("id", "riconciliazioni").maybeSingle(),
       fetchAll(() => sb.from("ops").select("*").order("id")),
       fetchAll(() => sb.from("ricorrenze").select("*").order("id")),
     ]);
     if (c.error) throw c.error;
     if (sc.error) throw sc.error;
+    // le verifiche sono un di più: se la riga non si legge, l'app funziona lo stesso
+    const rd = !rc.error && rc.data && rc.data.dati ? rc.data.dati : {};
+    state.riconc = { c1: Array.isArray(rd.c1) ? rd.c1 : [], c2: Array.isArray(rd.c2) ? rd.c2 : [] };
     state.scenari = sc.data && Array.isArray(sc.data.dati && sc.data.dati.scenari) ? sc.data.dati.scenari : [];
     state.cfg = { ...DEFAULT_CFG, ...(c.data ? c.data.dati : {}) };
     state.ops = ops.map(normOp);
@@ -231,12 +235,20 @@
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
     const personal = (k) => `<button type="button" class="card sum ${state.tab === k ? "active" : ""}" data-tab="${k}">
       <span class="t">${esc(cname(k))} · oggi</span><span class="big"${state.hide ? "" : ` data-k="${k}" data-v="${now[k]}"`}>${mEur(now[k])}</span>
-      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span>${sparkHtml(k, today)}</button>`;
+      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span>${vfHtml(k, today)}${sparkHtml(k, today)}</button>`;
     $("#cards").innerHTML = personal("c1") + personal("c2") +
       `<button type="button" class="card sum ${state.tab === "comune" ? "active" : ""}" data-tab="comune">
       <span class="t">Conto comune · uscite finora</span><span class="big" data-k="comune" data-v="${totOggi}">${eur(totOggi)}</span>
       <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${mEur(now.c1 + now.c2)}</span>${sparkHtml("comune", today)}</button>`;
     countUp();
+  }
+
+  // Quando il saldo calcolato è stato confrontato per l'ultima volta con quello della banca (nessuna cifra mostrata).
+  function vfHtml(k, today) {
+    const v = Calc.verifyStatus(state.riconc[k], today);
+    if (!v) return `<span class="vf none">⚖️ saldo non ancora verificato</span>`;
+    const when = v.days === 0 ? "oggi" : v.days === 1 ? "ieri" : `${v.days} giorni fa`;
+    return `<span class="vf ${v.stale ? "old" : "ok"}">${v.aperta ? "⚠ non allineato" : v.stale ? "⚠ verificato" : "✓ verificato"} ${when}</span>`;
   }
 
   // Mini-grafico del riquadro: tratto pieno fino a oggi, tratteggiato dopo. Con la privacy attiva non si disegna.
@@ -622,6 +634,99 @@
     $("#dlg-start").close();
     await reload();
   });
+
+  // ---------- riconciliazione col saldo della banca ----------
+  // La rettifica è una normale operazione (categoria «Rettifica») alla data scelta; lo storico delle verifiche sta
+  // nella tabella `config` (riga id = 'riconciliazioni'): nessuna tabella nuova.
+  async function saveRiconc(conto, rec) {
+    const r = await sb.from("config").select("dati").eq("id", "riconciliazioni").maybeSingle();
+    if (r.error) throw r.error;
+    const dati = { ...(r.data ? r.data.dati : {}) };
+    const list = (Array.isArray(dati[conto]) ? dati[conto] : []).concat([rec]).slice(-24);
+    dati[conto] = list;
+    const w = await sb.from("config").upsert({ id: "riconciliazioni", dati, updated_at: nowIso() });
+    if (w.error) throw w.error;
+    state.riconc = { c1: Array.isArray(dati.c1) ? dati.c1 : [], c2: Array.isArray(dati.c2) ? dati.c2 : [] };
+  }
+  const recState = { calc: null };
+  function openRec() {
+    if (state.hide) { hiddenWarn("la riconciliazione"); return; }
+    const sel = $("#r-conto");
+    sel.options[0].textContent = cname("c1"); sel.options[1].textContent = cname("c2");
+    sel.value = state.tab === "c2" ? "c2" : "c1";
+    const today = localToday();
+    $("#r-data").value = today; $("#r-data").max = today;
+    $("#r-banca").value = ""; $("#rec-msg").textContent = "";
+    recState.calc = null; recRefresh();
+    $("#dlg-rec").showModal();
+  }
+  function recParse() {
+    const raw = $("#r-banca").value, neg = /^\s*-/.test(raw), n = parseImporto(raw.replace(/^\s*-/, ""));
+    return Number.isNaN(n) || raw.trim() === "" ? NaN : neg ? -n : n;
+  }
+  // Ricalcola il confronto ogni volta che cambiano conto, data o saldo scritto.
+  function recRefresh() {
+    const conto = $("#r-conto").value, data = $("#r-data").value, banca = recParse();
+    const box = $("#rec-box"), save = $("#rec-save"), chk = $("#rec-check");
+    // storico del conto scelto
+    const hist = state.riconc[conto].slice(-3).reverse();
+    const hb = $("#rec-hist");
+    hb.hidden = !hist.length;
+    hb.innerHTML = hist.length ? `<strong>Ultime verifiche</strong>` + hist.map((x) => `<div><span>${fmtData(x.data)}</span><span>${x.diff === 0 ? "coincideva" : x.rettifica ? `rettificato ${sgn(x.diff)}` : `differenza ${sgn(x.diff)} non registrata`}</span></div>`).join("") : "";
+    const ok = Number.isFinite(banca) && /^\d{4}-\d\d-\d\d$/.test(data) && data <= localToday();
+    if (!ok) {
+      recState.calc = null; box.hidden = true; chk.hidden = true; save.disabled = true; save.textContent = "Confronta";
+      return;
+    }
+    const c = Calc.reconcile(state.entries, state.cfg, conto, data, banca);
+    recState.calc = { ...c, conto, data, banca };
+    box.hidden = false;
+    const d = c.diff;
+    box.className = "rec-box " + (d === 0 ? "ok" : "diff");
+    box.innerHTML = `<div class="rb-l"><span>Calcolato dall'app</span><strong>${eur(c.calcolato)}</strong></div>
+      <div class="rb-l"><span>Sulla banca</span><strong>${eur(banca)}</strong></div>
+      <div class="rb-l tot"><span>Differenza</span><strong>${d === 0 ? "nessuna ✓" : sgn(d)}</strong></div>
+      <p class="rb-n">${d === 0 ? "I saldi coincidono: il conto è allineato alla banca."
+        : d > 0 ? "Alla banca c'è di più: manca un'entrata o hai segnato una spesa in più. Controlla prima di rettificare."
+          : "Alla banca c'è meno: probabilmente manca una spesa. Controlla prima di rettificare."}</p>`;
+    save.disabled = false;
+    if (d === 0) { chk.hidden = true; save.textContent = "Conferma verifica"; }
+    else { chk.hidden = false; save.textContent = `Registra rettifica ${sgn(d)} €`; }
+  }
+  ["#r-conto", "#r-data"].forEach((s) => $(s).addEventListener("change", recRefresh));
+  $("#r-banca").addEventListener("input", recRefresh);
+  $("#btn-rec").addEventListener("click", openRec);
+  $("#rec-cancel").addEventListener("click", () => $("#dlg-rec").close());
+  async function recDo(withAdjust) {
+    const c = recState.calc, msg = $("#rec-msg"); msg.textContent = "";
+    if (!c) return;
+    if (c.data > localToday()) { msg.textContent = "Scegli una data fino a oggi."; return; }
+    const btns = ["#rec-save", "#rec-check", "#rec-cancel"].map((s) => $(s));
+    btns.forEach((b) => { b.disabled = true; });
+    try {
+      if (withAdjust && c.diff !== 0) {
+        const row = {
+          id: crypto.randomUUID(), data: c.data, voce: "Rettifica saldo (banca)", conto: c.conto, tipo: c.tipo, importo: c.importo,
+          categoria: "Rettifica", ordine: state.ops.reduce((m, o) => Math.max(m, o.ordine), -1) + 1,
+          ricorrenza_id: null, data_prevista: null, modificata: false, annullata: false, updated_at: nowIso(),
+        };
+        const { error } = await sb.from("ops").upsert(row);
+        if (error) throw error;
+      }
+    } catch (e) {
+      btns.forEach((b) => { b.disabled = false; });
+      if (isAuthError(e)) { $("#dlg-rec").close(); await handleError(e); return; }
+      msg.textContent = "Salvataggio non riuscito. Controlla la connessione e riprova."; return;
+    }
+    let warn = false;
+    try { await saveRiconc(c.conto, { data: c.data, banca: c.banca, calcolato: c.calcolato, diff: c.diff, rettifica: !!(withAdjust && c.diff !== 0), at: nowIso() }); } catch (e) { warn = true; }
+    btns.forEach((b) => { b.disabled = false; });
+    $("#dlg-rec").close();
+    await reload();
+    toast(warn ? "Rettifica registrata, ma la verifica non è stata salvata." : withAdjust && c.diff !== 0 ? "Rettifica registrata. Il conto è allineato." : c.diff === 0 ? "Verificato: i saldi coincidono." : "Verifica salvata (differenza non registrata).");
+  }
+  $("#form-rec").addEventListener("submit", (e) => { e.preventDefault(); recDo(true); });
+  $("#rec-check").addEventListener("click", () => recDo(false));
 
   // ---------- vista "Ricorrenti" ----------
   function renderRules() {

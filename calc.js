@@ -218,6 +218,23 @@
     return out;
   }
 
+  // ---------- Riconciliazione col saldo della banca ----------
+  // Confronta il saldo che la banca mostra (banca) con quello calcolato dall'app alla data indicata.
+  // diff > 0: alla banca c'è di più (manca un'entrata o c'è un'uscita in più); diff < 0: il contrario.
+  function reconcile(entries, cfg, conto, data, banca) {
+    const calcolato = balanceAt(entries, cfg, data)[conto];
+    const diff = r2(Number(banca) - calcolato);
+    return { calcolato, diff, tipo: diff > 0 ? "entrata" : "uscita", importo: Math.abs(diff) };
+  }
+  // Stato dell'ultima verifica di un conto: null se mai fatta. "vecchia" dopo 14 giorni o se restava una differenza.
+  function verifyStatus(list, today) {
+    if (!Array.isArray(list) || !list.length) return null;
+    const last = list[list.length - 1];
+    const days = Math.max(0, dayNum(today) - dayNum(last.data));
+    const aperta = Number(last.diff) !== 0 && !last.rettifica;
+    return { data: last.data, days, aperta, stale: aperta || days > 14 };
+  }
+
   // ---------- Spese per categoria ----------
   // entries: righe di compute().entries (annullate escluse). conto: "c1" | "c2" | "tot".
   // Le uscite comuni pesano per la quota del conto (metà), come nei saldi.
@@ -280,7 +297,7 @@
     return { ticks, min: a, max: b, step };
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, monthImpact, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, monthImpact, reconcile, verifyStatus, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);
