@@ -347,8 +347,8 @@
         <button type="button" class="btn sm" data-act="del" data-id="${esc(o.id)}" aria-label="Elimina ${esc(o.voce)}">Elimina</button>`;
     }
     return `<li class="row tx ${cls === "pos" ? "in" : "out"}${e.ann ? " ann" : ""}"><div class="av" aria-hidden="true">${CAT_ICON[o.categoria] || (cls === "pos" ? "💶" : "🧾")}</div>
-      <div class="mn"><div class="v">${esc(o.voce)}</div><div class="tags"><span class="d">${fmtGiorno(o.data)}</span>${tags}</div></div>
-      <div class="a"><div class="amt ${cls}">${sgnPriv(amt)}</div><div class="sub">${sub}</div></div>
+      <div class="mn"><div class="v">${esc(o.voce)}</div><div class="tags"><span class="d">${fmtGiorno(o.data)}</span>${tags}</div>${tab === "comune" && sub ? `<div class="sub split">${sub}</div>` : ""}</div>
+      <div class="a"><div class="amt ${cls}">${sgnPriv(amt)}</div>${tab !== "comune" && sub ? `<div class="sub">${sub}</div>` : ""}</div>
       <div class="act">${act}</div></li>`;
   }
 
