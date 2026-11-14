@@ -22,11 +22,12 @@
   const isEntrata = (x) => !!x && x.conto !== "comune" && x.tipo === "entrata";
   const fmtMese = (k) => `${MESI[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
   const fmtGiorno = (d) => `${Number(d.slice(8))} ${mesiCorti[Number(d.slice(5, 7)) - 1]}`;
-  const fmtData = (d) => `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+  const fmtData = (d) => (/^\d{4}-\d\d-\d\d/.test(d) ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "");
   const pad = (n) => String(n).padStart(2, "0");
   // Data di oggi nel fuso locale, come stringa YYYY-MM-DD (niente toISOString: sarebbe UTC)
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const CAT_ICON = { Stipendio: "💼", Auto: "🚗", "Università": "🎓", Abbonamenti: "📺", Telefono: "📱", Spesa: "🛒", Varie: "✨", "Acquisto casa": "🏠", Casa: "🛋️", Lavori: "🔨", Utenze: "💡", Altro: "📌", Rettifica: "⚖️" };
+  const catIcon = (c, fallback) => (Object.prototype.hasOwnProperty.call(CAT_ICON, c) ? CAT_ICON[c] : fallback);
   const BASE_CAT = ["Stipendio", "Auto", "Università", "Abbonamenti", "Telefono", "Spesa", "Varie", "Acquisto casa", "Casa", "Lavori", "Utenze", "Altro"];
   const DEFAULT_CFG = { c1: { nome: "Conto 1", iniziale: 0 }, c2: { nome: "Conto 2", iniziale: 0 }, dataInizio: localToday() };
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
@@ -358,7 +359,7 @@
       act = `<button type="button" class="btn sm" data-act="edit" data-id="${esc(o.id)}" aria-label="Modifica ${esc(o.voce)}">Modifica</button>
         <button type="button" class="btn sm" data-act="del" data-id="${esc(o.id)}" aria-label="Elimina ${esc(o.voce)}">Elimina</button>`;
     }
-    return `<li class="row tx ${cls === "pos" ? "in" : "out"}${e.ann ? " ann" : ""}"><div class="av" aria-hidden="true">${CAT_ICON[o.categoria] || (cls === "pos" ? "💶" : "🧾")}</div>
+    return `<li class="row tx ${cls === "pos" ? "in" : "out"}${e.ann ? " ann" : ""}"><div class="av" aria-hidden="true">${catIcon(o.categoria, cls === "pos" ? "💶" : "🧾")}</div>
       <div class="mn"><div class="v">${esc(o.voce)}</div><div class="tags"><span class="d">${fmtGiorno(o.data)}</span>${tags}</div>${tab === "comune" && sub ? `<div class="sub split">${sub}</div>` : ""}</div>
       <div class="a"><div class="amt ${cls}">${sgnPriv(amt)}</div>${tab !== "comune" && sub ? `<div class="sub">${sub}</div>` : ""}</div>
       <div class="act">${act}</div></li>`;
@@ -1134,7 +1135,7 @@
     const pct = (s) => `${((s.tot / usc) * 100).toFixed(s.tot / usc < .1 ? 1 : 0).replace(".", ",")}%`;
     const lrow = (s, i) => `<button type="button" class="lg-row${sel === i ? " on" : ""}" data-sact="seg" data-k="${i}" aria-pressed="${sel === i}">
         <i class="lg-dot" style="background:${cols[i]}"></i>
-        <span class="lg-nm">${s.kind === "real" ? (CAT_ICON[s.label] || "🏷️") + " " : ""}${esc(s.label)}<small>${s.n} ${s.n === 1 ? "operazione" : "operazioni"} · ${pct(s)}</small></span>
+        <span class="lg-nm">${s.kind === "real" ? catIcon(s.label, "🏷️") + " " : ""}${esc(s.label)}<small>${s.n} ${s.n === 1 ? "operazione" : "operazioni"} · ${pct(s)}</small></span>
         <span class="lg-v">${eur(s.tot)}</span></button>`;
     const realIdx = segs.map((s, i) => i).filter((i) => segs[i].kind === "real");
     const simIdx = segs.map((s, i) => i).filter((i) => segs[i].kind === "sim");
@@ -1423,7 +1424,7 @@
         if (prevMap.has(r.cat) && d !== 0) delta = `<small class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${eur(Math.abs(d))}</small>`;
         else if (!prevMap.has(r.cat)) delta = `<small>nuova</small>`;
       }
-      return `<div class="catrow"><div class="top2"><div class="av2" aria-hidden="true">${CAT_ICON[r.cat] || "🏷️"}</div>
+      return `<div class="catrow"><div class="top2"><div class="av2" aria-hidden="true">${catIcon(r.cat, "🏷️")}</div>
         <div class="nm">${esc(r.cat)}<small>${r.n} ${r.n === 1 ? "operazione" : "operazioni"} · ${share.toFixed(share < 10 ? 1 : 0).replace(".", ",")}%</small></div>
         <div class="vl">${eur(r.tot)}${delta}</div></div>
         <div class="bar" role="img" aria-label="${esc(r.cat)}: ${share.toFixed(0)}% delle uscite"><i style="width:${Math.max(share, 1.5).toFixed(1)}%;background:${catColor(r.cat)}"></i></div></div>`;
