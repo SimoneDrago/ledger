@@ -966,13 +966,13 @@
         const s = k === "tot" ? r2(row.sim.c1 + row.sim.c2) : row.sim[k];
         return gd.conto === k && s < gd.minimo;
       };
-      const cell = (v, extra) => `<td class="${state.hide ? "" : (v < 0 ? "neg-cell " : "") + (extra || "")}">${mEur(v)}</td>`;
+      const cell = (v, extra) => `<td class="saldo ${state.hide ? "" : (v < 0 ? "neg-cell " : "") + (extra || "")}">${mEur(v)}</td>`;
       const mv = (v) => `<td>${v === 0 ? "—" : sgnPriv(v)}</td>`;
-      const spesa = (v) => `<td>${v === 0 ? "—" : eur(v)}</td>`;
+      const spesa = (v) => `<td class="grp">${v === 0 ? "—" : eur(v)}</td>`;
       h += `<div class="sim-h"><h3>Mese per mese</h3></div>
         <section class="card scroll"><table><thead><tr><th rowspan="2">Mese</th>
-          <th colspan="3">${esc(cname("c1"))}</th><th colspan="3">${esc(cname("c2"))}</th></tr>
-          <tr><th>spese</th><th>scenario</th><th>saldo</th><th>spese</th><th>scenario</th><th>saldo</th></tr></thead><tbody>` +
+          <th colspan="3" class="grp">${esc(cname("c1"))}</th><th colspan="3" class="grp">${esc(cname("c2"))}</th></tr>
+          <tr><th class="grp">spese</th><th>scenario</th><th class="saldo">saldo</th><th class="grp">spese</th><th>scenario</th><th class="saldo">saldo</th></tr></thead><tbody>` +
         res.rows.map((r) => `<tr class="${goalMonth === r.mese ? "goal-row" : ""}"><td>${fmtMese(r.mese)}</td>
           ${spesa(r.spese.c1)}${mv(r.voci.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}
           ${spesa(r.spese.c2)}${mv(r.voci.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}</tr>`).join("") +

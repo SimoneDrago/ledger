@@ -239,6 +239,17 @@ dialog h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; }
 .sim-h h3 { margin: 0; font-size: 1.05rem; font-weight: 800; letter-spacing: -.01em; }
 td.neg-cell { color: var(--neg); font-weight: 800; }
 td.low-cell { background: color-mix(in srgb, var(--neg) 14%, transparent); }
+/* tabella «Mese per mese»: la colonna del saldo è in evidenza, i due conti sono separati da una linea */
+th.grp, td.grp { border-left: 1px solid var(--line); }
+th.saldo, td.saldo {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent) 7%, transparent));
+  font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+th.saldo { color: var(--accent); border-radius: 10px 10px 0 0; letter-spacing: .02em; }
+td.saldo.neg-cell { color: var(--neg); }
+td.saldo.low-cell { background: color-mix(in srgb, var(--neg) 20%, transparent); box-shadow: inset 2px 0 0 var(--neg); }
+tr.goal-row td.saldo { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent), inset 0 -2px 0 var(--accent); }
 tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
 
 /* ----- animazioni ----- */
