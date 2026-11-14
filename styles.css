@@ -281,3 +281,86 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
 .btn.icon[aria-pressed="true"] { background: var(--grad); color: #fff; border-color: transparent; }
 .btn.icon[aria-pressed="true"] .ico-on { display: none; }
 .btn.icon[aria-pressed="true"] .ico-off { display: block; }
+
+/* ----- mini-grafici nei riquadri ----- */
+.spark-wrap { position: relative; display: block; height: 34px; margin-top: 12px; }
+.spark { width: 100%; height: 100%; display: block; overflow: visible; }
+.sp-line, .sp-fut { fill: none; stroke: var(--dot, var(--accent)); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.sp-fut { stroke-dasharray: 3 4; opacity: .65; }
+.sp-area { fill: var(--dot, var(--accent)); opacity: .13; }
+.spark-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--dot, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot, var(--accent)) 28%, transparent); }
+.sum.active .sp-line, .sum.active .sp-fut { stroke: #fff; }
+.sum.active .sp-area { fill: #fff; opacity: .2; }
+.sum.active .spark-dot { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .3); }
+
+/* ----- grafico della simulazione ----- */
+.chart-card { margin-bottom: 14px; padding: 14px 12px 12px; }
+.seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--tag); border-radius: 12px; margin-bottom: 8px; }
+.seg-b { font: inherit; font-size: .82rem; font-weight: 600; color: var(--muted); background: transparent; border: 0; border-radius: 9px; padding: 6px 12px; min-height: 36px; cursor: pointer; transition: background .15s, color .15s; }
+.seg-b[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 6px rgba(15, 23, 42, .14); }
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.ch-grid { stroke: var(--line); stroke-width: 1; }
+.ch-t { fill: var(--muted); font-size: 10.5px; font-family: inherit; }
+.ch-real { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 5; stroke-linecap: round; stroke-linejoin: round; }
+.ch-sim { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.ch-area { fill: var(--accent); opacity: .10; }
+.ch-goal { stroke: var(--pos); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.ch-goal-t { fill: var(--pos); font-size: 10.5px; font-weight: 700; }
+.ch-goalv { stroke: var(--pos); stroke-width: 1; opacity: .5; }
+.ch-today { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.ch-min { fill: var(--neg); stroke: var(--card); stroke-width: 2; }
+.ch-cur { stroke: var(--text); stroke-width: 1; opacity: .35; }
+.ch-d1 { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+.ch-d2 { fill: var(--muted); stroke: var(--card); stroke-width: 2; }
+.ch-hit { fill: transparent; touch-action: pan-y; cursor: crosshair; }
+.ch-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; color: var(--muted); font-size: .76rem; }
+.ch-leg .k::before { content: ""; display: inline-block; width: 16px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 3px solid var(--accent); }
+.ch-leg .k.real::before { border-top: 2px dashed var(--muted); }
+.ch-leg .k.goal::before { border-top: 2px dotted var(--pos); }
+.ch-leg .k.today::before { border-top: 1px dashed var(--muted); }
+.ch-read { margin-top: 8px; min-height: 1.3em; font-size: .86rem; color: var(--muted); }
+.ch-read strong { color: var(--text); }
+
+/* ----- scheletro di caricamento ----- */
+.skel-page { place-items: start center; }
+.skel-wrap { width: min(100%, 880px); padding: 20px 16px; display: grid; gap: 14px; }
+.skel { border-radius: 16px; background: linear-gradient(100deg, var(--tag) 30%, var(--card-2) 50%, var(--tag) 70%); background-size: 300% 100%; animation: shimmer 1.5s linear infinite; }
+.skel-h { height: 44px; width: 55%; }
+.skel-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.skel-c { height: 104px; }
+.skel-t { height: 52px; }
+.skel-r { height: 68px; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (max-width: 640px) { .skel-cards { grid-template-columns: 1fr; } .skel-c { height: 84px; } }
+
+/* ----- transizioni tra viste e ingresso ----- */
+#main-view, #rules-view, #sim-view, #cat-view { animation: rise .28s ease both; }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.enter .cards .sum { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+.enter .cards .sum:nth-child(2) { animation-delay: .08s; }
+.enter .cards .sum:nth-child(3) { animation-delay: .16s; }
+.enter .sp-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1s .25s ease forwards; }
+
+/* ----- barra di navigazione in basso (telefono) ----- */
+.bnav { display: none; }
+@media (max-width: 640px) {
+  .wrap { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .actions #btn-rules, .actions #btn-sim, .actions #btn-cat { display: none; }
+  .bnav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+    border-top: 1px solid var(--line); box-shadow: 0 -10px 30px -18px rgba(15, 23, 42, .35);
+  }
+  .bnav button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 54px; background: none; border: 0; border-radius: 14px; color: var(--muted); font: inherit; font-size: .68rem; font-weight: 600; cursor: pointer;
+    position: relative; transition: color .15s, background .15s, transform .12s;
+  }
+  .bnav button:active { transform: scale(.94); }
+  .bnav button[aria-current="page"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  .bnav button[aria-current="page"]::before { content: ""; position: absolute; top: -7px; width: 26px; height: 3px; border-radius: 0 0 4px 4px; background: var(--grad); }
+  .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .cards .sum .spark-wrap { grid-column: 1 / -1; }
+}

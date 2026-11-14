@@ -32,7 +32,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, simChart: null, chartData: null, shown: {}, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -144,7 +144,9 @@
     state.hide = lsGet("conti-hide") === "1"; applyHide();
     const saved = lsGet("conti-tab");
     if (saved === "c1" || saved === "c2" || saved === "comune") state.tab = saved;
-    showView("app"); render();
+    showView("app");
+    const va = $("#view-app"); va.classList.add("enter"); setTimeout(() => va.classList.remove("enter"), 1500);
+    render();
     if (genFailed) toast("Operazioni ricorrenti non aggiornate. Riprova più tardi.");
   }
   async function reload() { try { await load(); render(); } catch (e) { await handleError(e); } }
@@ -206,6 +208,7 @@
     $("#tab-c1").textContent = cname("c1"); $("#tab-c2").textContent = cname("c2");
     document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
     $("#btn-add").textContent = tab === "comune" ? "+ Aggiungi uscita comune" : `+ Aggiungi a ${cname(tab)}`;
+    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === state.view ? "page" : "false"));
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
@@ -227,12 +230,50 @@
     const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
     const personal = (k) => `<button type="button" class="card sum ${state.tab === k ? "active" : ""}" data-tab="${k}">
-      <span class="t">${esc(cname(k))} · oggi</span><span class="big">${mEur(now[k])}</span>
-      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span></button>`;
+      <span class="t">${esc(cname(k))} · oggi</span><span class="big"${state.hide ? "" : ` data-k="${k}" data-v="${now[k]}"`}>${mEur(now[k])}</span>
+      <span class="s">${proj(k) ? proj(k) + " · " : ""}minimo ${mEur(state.min[k])}</span>${sparkHtml(k, today)}</button>`;
     $("#cards").innerHTML = personal("c1") + personal("c2") +
       `<button type="button" class="card sum ${state.tab === "comune" ? "active" : ""}" data-tab="comune">
-      <span class="t">Conto comune · uscite finora</span><span class="big">${eur(totOggi)}</span>
-      <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${mEur(now.c1 + now.c2)}</span></button>`;
+      <span class="t">Conto comune · uscite finora</span><span class="big" data-k="comune" data-v="${totOggi}">${eur(totOggi)}</span>
+      <span class="s">${future ? `previste in tutto ${eur(tot)} · ` : ""}a testa ${eur(totOggi / 2)} · due conti oggi ${mEur(now.c1 + now.c2)}</span>${sparkHtml("comune", today)}</button>`;
+    countUp();
+  }
+
+  // Mini-grafico del riquadro: tratto pieno fino a oggi, tratteggiato dopo. Con la privacy attiva non si disegna.
+  function sparkHtml(k, today) {
+    if (state.hide) return "";
+    const { cfg, entries } = state;
+    const last = entries.length ? entries[entries.length - 1].o.data : today;
+    let f;
+    if (k === "comune") {
+      const com = entries.filter((e) => e.o.conto === "comune");
+      f = (d) => com.reduce((s, e) => (e.o.data <= d ? s + e.o.importo : s), 0);
+    } else f = (d) => Calc.balanceAt(entries, cfg, d)[k];
+    const pts = Calc.monthlySeries(cfg.dataInizio, last > today ? last : today, today, f);
+    if (pts.length < 2) return "";
+    const W = 100, H = 34, g = Calc.sparkGeometry(pts, W, H, 2, 4);
+    const dot = g.today ? `<i class="spark-dot" style="left:${((g.today.x / W) * 100).toFixed(1)}%;top:${((g.today.y / H) * 100).toFixed(1)}%"></i>` : "";
+    return `<span class="spark-wrap" aria-hidden="true"><svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+      (g.area ? `<path class="sp-area" d="${g.area}"/>` : "") + `<path class="sp-line" pathLength="1" d="${g.past}"/>` +
+      (g.fut ? `<path class="sp-fut" d="${g.fut}"/>` : "") + `</svg>${dot}</span>`;
+  }
+
+  // I saldi "scorrono" fino al valore. Solo se il browser lo permette e senza "riduci movimento".
+  function countUp() {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (state.hide || reduce || typeof requestAnimationFrame !== "function") return;
+    document.querySelectorAll("#cards .big[data-v]").forEach((el) => {
+      const k = el.dataset.k, to = Number(el.dataset.v), from = state.shown[k] === undefined ? 0 : state.shown[k];
+      state.shown[k] = to;
+      if (from === to) return;
+      const t0 = performance.now(), dur = 750;
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = eur(p >= 1 ? to : from + (to - from) * e);
+        if (p < 1 && el.isConnected) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   function groupByMonth(arr) {
@@ -359,6 +400,9 @@
   $("#btn-start").addEventListener("click", openStart);
   $("#btn-csv").addEventListener("click", copyCsv);
   $("#btn-rules").addEventListener("click", () => { state.view = "rules"; state.confirmRule = null; render(); window.scrollTo(0, 0); });
+  // barra di navigazione in basso (telefono)
+  function go(view) { state.view = view; state.confirmDel = null; state.confirmRule = null; state.simConfirm = null; render(); window.scrollTo(0, 0); }
+  $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
   $("#btn-sim").addEventListener("click", () => { state.view = "sim"; state.simConfirm = null; render(); window.scrollTo(0, 0); });
   $("#sim-back").addEventListener("click", () => { state.view = "main"; state.simConfirm = null; render(); });
   $("#rules-back").addEventListener("click", () => { state.view = "main"; state.confirmRule = null; render(); });
@@ -824,6 +868,9 @@
       h += `<div class="card verdict"><div class="sub">Nessun obiettivo. Impostalo da «Nome e obiettivo» per avere un verdetto.</div></div>`;
     }
 
+    // grafico dell'andamento
+    if (res.rows.length) h += chartCard(res, state.simChart || (res.goalDef ? res.goalDef.conto : "c1"));
+
     // voci
     h += `<div class="sim-h"><h3>Voci dello scenario</h3><button type="button" class="btn primary sm" data-sact="voce-add">+ Voce</button></div>`;
     const voci = sc.voci || [];
@@ -875,6 +922,65 @@
     body.innerHTML = h;
   }
 
+  const kfmt = (v) => { const a = Math.abs(v); const s = a >= 1000 ? String(r2(a / 1000)).replace(".", ",") + "k" : String(Math.round(a)); return (v < 0 ? "−" : "") + s; };
+  function chartCard(res, conto) {
+    if (state.hide) return `<div class="card chart-card"><div class="sub">Grafico nascosto: la modalità privacy è attiva.</div></div>`;
+    const rows = res.rows;
+    if (rows.length < 2) return "";
+    const pills = [["c1", "Conto 1"], ["c2", "Conto 2"], ["tot", "Insieme"]]
+      .map(([k, l]) => `<button type="button" class="seg-b" data-sact="chart" data-k="${k}" aria-pressed="${k === conto}">${l}</button>`).join("");
+    const W = Math.max(280, Math.round(($("#sim-body").clientWidth || 640) - 30)), H = 230, L = 44, R = 12, T = 14, B = 26;
+    const pv = (b) => (conto === "tot" ? r2(b.c1 + b.c2) : b[conto]);
+    const dates = rows.map((r) => Calc.monthEndPlus(`${r.mese}-01`, 0));
+    const real = rows.map((r) => pv(r.real)), sim = rows.map((r) => pv(r.sim));
+    const gd = res.goalDef && res.goalDef.conto === conto ? res.goalDef : null;
+    const vals = real.concat(sim, gd ? [gd.minimo] : []);
+    const tk = Calc.niceTicks(Math.min(...vals), Math.max(...vals), 4);
+    const x0 = Calc.dayNum(dates[0]), x1 = Calc.dayNum(dates[dates.length - 1]);
+    const X = (d) => L + ((Calc.dayNum(d) - x0) / ((x1 - x0) || 1)) * (W - L - R);
+    const Y = (v) => T + (1 - (v - tk.min) / ((tk.max - tk.min) || 1)) * (H - T - B);
+    const line = (vs) => vs.map((v, i) => `${i ? "L" : "M"}${X(dates[i]).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+    const xs = dates.map((d) => X(d)), ysSim = sim.map((v) => Y(v)), ysReal = real.map((v) => Y(v));
+    let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Andamento del saldo: reale e con scenario">`;
+    for (const v of tk.ticks) s += `<line class="ch-grid" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="ch-t" x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${kfmt(v)}</text>`;
+    const every = Math.max(1, Math.ceil(dates.length / 6));
+    dates.forEach((d, i) => { if (i % every === 0) s += `<text class="ch-t" x="${xs[i].toFixed(1)}" y="${H - 8}" text-anchor="middle">${mesiCorti[Number(d.slice(5, 7)) - 1]} ${d.slice(2, 4)}</text>`; });
+    s += `<path class="ch-area" d="${line(sim)} L${xs[xs.length - 1].toFixed(1)} ${Y(tk.min).toFixed(1)} L${xs[0].toFixed(1)} ${Y(tk.min).toFixed(1)} Z"/>`;
+    const today = localToday();
+    if (today >= dates[0] && today <= dates[dates.length - 1]) s += `<line class="ch-today" x1="${X(today).toFixed(1)}" x2="${X(today).toFixed(1)}" y1="${T}" y2="${H - B}"/>`;
+    if (gd) {
+      s += `<line class="ch-goal" x1="${L}" x2="${W - R}" y1="${Y(gd.minimo).toFixed(1)}" y2="${Y(gd.minimo).toFixed(1)}"/><text class="ch-goal-t" x="${W - R - 2}" y="${(Y(gd.minimo) - 5).toFixed(1)}" text-anchor="end">obiettivo</text>`;
+      if (gd.data >= dates[0] && gd.data <= dates[dates.length - 1]) s += `<line class="ch-goalv" x1="${X(gd.data).toFixed(1)}" x2="${X(gd.data).toFixed(1)}" y1="${T}" y2="${H - B}"/>`;
+    }
+    s += `<path class="ch-real" d="${line(real)}"/><path class="ch-sim" d="${line(sim)}"/>`;
+    const mi = sim.indexOf(Math.min(...sim));
+    s += `<circle class="ch-min" cx="${xs[mi].toFixed(1)}" cy="${ysSim[mi].toFixed(1)}" r="4.5"/>`;
+    s += `<line class="ch-cur" x1="0" x2="0" y1="${T}" y2="${H - B}" style="display:none"/><circle class="ch-d2" r="4" style="display:none"/><circle class="ch-d1" r="4.5" style="display:none"/>`;
+    s += `<rect class="ch-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/></svg>`;
+    state.chartData = { W, xs, ysSim, ysReal, real, sim, mesi: rows.map((r) => r.mese) };
+    return `<div class="card chart-card"><div class="seg" role="group" aria-label="Conto del grafico">${pills}</div>${s}
+      <div class="ch-leg"><span class="k real">Reale</span><span class="k">Con scenario</span>${gd ? `<span class="k goal">Obiettivo</span>` : ""}<span class="k today">Oggi</span></div>
+      <div class="ch-read" id="ch-read">Passa sul grafico (o toccalo) per vedere i valori di ogni mese.</div></div>`;
+  }
+  // il cursore segue il dito/mouse e mostra i valori del mese più vicino
+  function chartMove(e) {
+    const hit = e.target.closest && e.target.closest(".ch-hit"), cd = state.chartData;
+    if (!hit || !cd) return;
+    const svg = hit.closest("svg"), rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    const px = ((e.clientX - rect.left) * cd.W) / rect.width;
+    let bi = 0, bd = Infinity;
+    cd.xs.forEach((x, i) => { const d = Math.abs(x - px); if (d < bd) { bd = d; bi = i; } });
+    const cur = svg.querySelector(".ch-cur"), d1 = svg.querySelector(".ch-d1"), d2 = svg.querySelector(".ch-d2");
+    cur.setAttribute("x1", cd.xs[bi]); cur.setAttribute("x2", cd.xs[bi]); cur.style.display = "";
+    d1.setAttribute("cx", cd.xs[bi]); d1.setAttribute("cy", cd.ysSim[bi]); d1.style.display = "";
+    d2.setAttribute("cx", cd.xs[bi]); d2.setAttribute("cy", cd.ysReal[bi]); d2.style.display = "";
+    $("#ch-read").innerHTML = `<strong>${fmtMese(cd.mesi[bi])}</strong> · reale ${eur(cd.real[bi])} · con scenario <strong>${eur(cd.sim[bi])}</strong>`;
+  }
+  $("#sim-body").addEventListener("pointermove", chartMove);
+  $("#sim-body").addEventListener("pointerdown", chartMove);
+  let rzT; window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(() => { if (state.view === "sim") renderSim(); }, 200); });
+
   const newId = () => crypto.randomUUID();
   $("#sim-body").addEventListener("change", async (e) => {
     if (e.target.id === "sim-sel") { state.scenId = e.target.value; lsSet("conti-scen", state.scenId); state.simConfirm = null; renderSim(); return; }
@@ -886,6 +992,7 @@
     const b = e.target.closest("button[data-sact]"); if (!b) return;
     const a = b.dataset.sact, id = b.dataset.id, sc = curScen();
     if (a === "cancel") { state.simConfirm = null; renderSim(); return; }
+    if (a === "chart") { state.simChart = b.dataset.k; renderSim(); return; }
     if (a === "voce-add") { openVoce(null); return; }
     if (a === "voce-edit") { openVoce(sc.voci.find((v) => v.id === id)); return; }
     if (a === "voce-del") { state.simConfirm = { type: "voce", id }; renderSim(); return; }

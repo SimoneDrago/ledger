@@ -211,7 +211,48 @@
     return { uscite, entrate, rows };
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, categorySummary };
+  // ---------- Grafici (geometria pura, nessun DOM) ----------
+  const dayNum = (s) => { const [y, m, d] = ymd(s); return Date.UTC(y, m - 1, d) / 86400000; };
+
+  // Serie a fine mese (più il punto di oggi) di una grandezza f(data) -> numero
+  function monthlySeries(startDate, endDate, today, f) {
+    const dates = new Set([startDate]);
+    const lastEnd = monthEndPlus(endDate, 0);
+    for (let cur = monthEndPlus(startDate, 0); cur <= lastEnd; cur = monthEndPlus(cur, 1)) dates.add(cur);
+    if (today >= startDate && today <= lastEnd) dates.add(today);
+    return [...dates].sort().map((d) => ({ d, v: f(d), today: d === today }));
+  }
+
+  // Percorsi SVG di una mini-linea: tratto passato (fino a oggi), tratto futuro, area sotto il passato
+  function sparkGeometry(points, w, h, padX, padY) {
+    const vs = points.map((p) => p.v);
+    let lo = Math.min(...vs), hi = Math.max(...vs);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const x0 = dayNum(points[0].d), x1 = dayNum(points[points.length - 1].d);
+    const X = (d) => padX + ((dayNum(d) - x0) / ((x1 - x0) || 1)) * (w - 2 * padX);
+    const Y = (v) => h - padY - ((v - lo) / (hi - lo)) * (h - 2 * padY);
+    const P = points.map((p) => ({ x: X(p.d), y: Y(p.v), d: p.d, v: p.v, today: !!p.today }));
+    const ti = P.findIndex((p) => p.today);
+    const past = ti < 0 ? P : P.slice(0, ti + 1), fut = ti < 0 ? [] : P.slice(ti);
+    const path = (arr) => arr.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+    const base = (h - padY).toFixed(1);
+    const area = past.length > 1 ? `${path(past)} L${past[past.length - 1].x.toFixed(1)} ${base} L${past[0].x.toFixed(1)} ${base} Z` : "";
+    return { past: path(past), fut: fut.length > 1 ? path(fut) : "", area, today: ti >= 0 ? P[ti] : null, pts: P, lo, hi };
+  }
+
+  // Valori "tondi" per gli assi
+  function niceTicks(lo, hi, n) {
+    n = n || 4;
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+    const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+    const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+    const ticks = [];
+    for (let v = a; v <= b + step / 2; v += step) ticks.push(r2(v));
+    return { ticks, min: a, max: b, step };
+  }
+
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);
