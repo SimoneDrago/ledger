@@ -15,6 +15,7 @@
   const pad = (n) => String(n).padStart(2, "0");
   // Data di oggi nel fuso locale, come stringa YYYY-MM-DD (niente toISOString: sarebbe UTC)
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const CAT_ICON = { Stipendio: "💼", Auto: "🚗", "Università": "🎓", Abbonamenti: "📺", Telefono: "📱", Spesa: "🛒", Varie: "✨", "Acquisto casa": "🏠", Casa: "🛋️", Lavori: "🔨", Utenze: "💡", Altro: "📌" };
   const BASE_CAT = ["Stipendio", "Auto", "Università", "Abbonamenti", "Telefono", "Spesa", "Varie", "Acquisto casa", "Casa", "Lavori", "Utenze", "Altro"];
   const DEFAULT_CFG = { c1: { nome: "Conto 1", iniziale: 0 }, c2: { nome: "Conto 2", iniziale: 0 }, dataInizio: localToday() };
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
@@ -269,8 +270,8 @@
       act = `<button type="button" class="btn sm" data-act="edit" data-id="${esc(o.id)}" aria-label="Modifica ${esc(o.voce)}">Modifica</button>
         <button type="button" class="btn sm" data-act="del" data-id="${esc(o.id)}" aria-label="Elimina ${esc(o.voce)}">Elimina</button>`;
     }
-    return `<li class="row${e.ann ? " ann" : ""}"><div class="d">${fmtGiorno(o.data)}</div>
-      <div><div class="v">${esc(o.voce)}</div><div class="tags">${tags}</div></div>
+    return `<li class="row tx ${cls === "pos" ? "in" : "out"}${e.ann ? " ann" : ""}"><div class="av" aria-hidden="true">${CAT_ICON[o.categoria] || (cls === "pos" ? "💶" : "🧾")}</div>
+      <div class="mn"><div class="v">${esc(o.voce)}</div><div class="tags"><span class="d">${fmtGiorno(o.data)}</span>${tags}</div></div>
       <div class="a"><div class="amt ${cls}">${sgn(amt)}</div><div class="sub">${sub}</div></div>
       <div class="act">${act}</div></li>`;
   }
