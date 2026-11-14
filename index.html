@@ -61,6 +61,7 @@
     <div class="actions">
       <button class="btn primary" id="btn-add" type="button"></button>
       <button class="btn" id="btn-rules" type="button">🔁 Ricorrenti</button>
+      <button class="btn" id="btn-sim" type="button">🧪 Simulazione</button>
       <button class="btn" id="btn-start" type="button">Saldi di partenza</button>
       <button class="btn" id="btn-csv" type="button">Copia CSV</button>
       <label class="chk"><input type="checkbox" id="chk-ann"> Mostra annullate</label>
@@ -77,6 +78,16 @@
       </div>
       <p class="note">Ogni regola crea da sola le operazioni dei prossimi 12 mesi. Ogni operazione creata si può modificare o eliminare singolarmente.</p>
       <ul class="rows" id="rules-list"></ul>
+    </div>
+
+    <div id="sim-view" hidden>
+      <div class="rules-head">
+        <button class="btn" id="sim-back" type="button">← Indietro</button>
+        <h2>Simulazione</h2>
+        <button class="btn primary" id="sim-new" type="button">+ Scenario</button>
+      </div>
+      <p class="note">Prova situazioni ipotetiche (mutuo, caparra, notaio…) sopra ai tuoi dati. Quello che scrivi qui non modifica i conti.</p>
+      <div id="sim-body"></div>
     </div>
   </div>
 
@@ -186,6 +197,97 @@
           <button class="btn" type="button" id="ask-no">No, solo la regola</button>
           <button class="btn primary" type="button" id="ask-yes">Sì, applica</button>
         </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Finestra scenario -->
+  <dialog id="dlg-scen">
+    <form id="form-scen" novalidate>
+      <h2 id="scen-title">Nuovo scenario</h2>
+      <label for="sc-nome">Nome dello scenario</label>
+      <input id="sc-nome" type="text" maxlength="60" required>
+      <p class="hint">Obiettivo (facoltativo): quanto vuoi avere su un conto, a una certa data.</p>
+      <label for="sc-conto">Conto</label>
+      <select id="sc-conto">
+        <option value="c1"></option>
+        <option value="c2"></option>
+        <option value="tot">Conto 1 + Conto 2 insieme</option>
+      </select>
+      <label for="sc-min">Voglio almeno (€)</label>
+      <input id="sc-min" type="text" inputmode="decimal" autocomplete="off" placeholder="lascia vuoto per nessun obiettivo">
+      <label for="sc-data">Alla data</label>
+      <input id="sc-data" type="date">
+      <p id="scen-msg" class="msg" role="alert"></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="scen-cancel">Annulla</button>
+        <button class="btn primary" type="submit" id="scen-save">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Finestra voce di scenario -->
+  <dialog id="dlg-voce">
+    <form id="form-voce" novalidate>
+      <h2 id="voce-title">Nuova voce</h2>
+      <label for="v-tpl">Parti da un modello</label>
+      <select id="v-tpl">
+        <option value="">— nessuno —</option>
+        <option value="mutuo">Rata mutuo</option>
+        <option value="caparra">Caparra</option>
+        <option value="notaio">Notaio</option>
+        <option value="agenzia">Agenzia</option>
+        <option value="imposte">Imposte</option>
+        <option value="spesa">Spesa una tantum</option>
+        <option value="entrata">Entrata mensile</option>
+      </select>
+
+      <label for="v-conto">Conto</label>
+      <select id="v-conto">
+        <option value="c1"></option>
+        <option value="c2"></option>
+        <option value="comune">Conto comune (diviso a metà)</option>
+      </select>
+
+      <label for="v-voce">Descrizione</label>
+      <input id="v-voce" type="text" maxlength="120" required>
+
+      <div id="v-tipo-wrap">
+        <label for="v-tipo">Tipo</label>
+        <select id="v-tipo">
+          <option value="uscita">Uscita</option>
+          <option value="entrata">Entrata</option>
+        </select>
+      </div>
+
+      <label for="v-importo">Importo (€)</label>
+      <input id="v-importo" type="text" inputmode="decimal" autocomplete="off" required>
+
+      <label for="v-data">Data (della prima volta)</label>
+      <input id="v-data" type="date" required>
+
+      <label for="v-freq">Quante volte</label>
+      <select id="v-freq">
+        <option value="0">Una volta sola</option>
+        <option value="1">Ogni mese</option>
+        <option value="2">Ogni 2 mesi</option>
+        <option value="3">Ogni 3 mesi</option>
+        <option value="6">Ogni 6 mesi</option>
+        <option value="12">Ogni anno</option>
+        <option value="altro">Altro numero di mesi…</option>
+      </select>
+      <input id="v-ogni" type="number" min="1" max="24" step="1" inputmode="numeric" aria-label="Numero di mesi (1-24)" hidden>
+
+      <div id="v-volte-wrap" hidden>
+        <label for="v-volte">Per quante volte in tutto</label>
+        <input id="v-volte" type="number" min="1" max="600" step="1" inputmode="numeric">
+      </div>
+
+      <p id="v-preview" class="hint" aria-live="polite"></p>
+      <p id="voce-msg" class="msg" role="alert"></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="voce-cancel">Annulla</button>
+        <button class="btn primary" type="submit" id="voce-save">Salva</button>
       </div>
     </form>
   </dialog>

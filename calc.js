@@ -131,7 +131,66 @@
     return `ogni ${n} mesi il ${g}`;
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText };
+  // ---------- Simulazione (scenari) ----------
+  // Una voce di scenario: { id, voce, conto, tipo, importo, data, ogni_mesi (0 = una volta sola), volte, attiva }
+  function expandVoce(v) {
+    const periodic = Number(v.ogni_mesi) > 0;
+    const dates = periodic
+      ? occurrences({ data_inizio: v.data, ogni_mesi: Number(v.ogni_mesi), giorno: Number(v.data.slice(8, 10)) }, "0000-01-01", "9999-12-31", Math.max(1, Number(v.volte) || 1))
+      : [v.data];
+    return dates.map((d) => ({
+      id: `sim_${v.id}_${d}`, voce: v.voce, data: d, conto: v.conto, tipo: v.conto === "comune" ? "uscita" : v.tipo,
+      importo: Number(v.importo), categoria: null, ordine: 0, annullata: false, sim: true,
+    }));
+  }
+
+  // Saldo dopo l'ultima operazione con data <= date (altrimenti il saldo iniziale)
+  function balanceAt(entries, cfg, date) {
+    let b = { c1: Number(cfg.c1.iniziale), c2: Number(cfg.c2.iniziale) };
+    for (const e of entries) { if (e.o.data > date) break; b = e.b; }
+    return b;
+  }
+  const pick = (conto, b) => (conto === "tot" ? r2(b.c1 + b.c2) : b[conto]);
+
+  function minPoint(entries, cfg, upTo) {
+    const m = { c1: { v: Number(cfg.c1.iniziale), d: cfg.dataInizio }, c2: { v: Number(cfg.c2.iniziale), d: cfg.dataInizio } };
+    for (const e of entries) {
+      if (e.o.data > upTo) break;
+      for (const k of ["c1", "c2"]) if (e.b[k] < m[k].v) m[k] = { v: e.b[k], d: e.o.data };
+    }
+    return m;
+  }
+
+  // Confronta i dati reali con i dati + le voci attive dello scenario. Non scrive nulla.
+  function simulate(cfg, ops, sc) {
+    const voci = (sc.voci || []).filter((v) => v.attiva !== false && /^\d{4}-\d\d-\d\d$/.test(v.data || ""));
+    const simOps = voci.flatMap(expandVoce);
+    const real = compute(cfg, ops), sim = compute(cfg, ops.concat(simOps));
+    const g0 = sc.obiettivo;
+    const goal = g0 && ["c1", "c2", "tot"].includes(g0.conto) && /^\d{4}-\d\d-\d\d$/.test(g0.data || "") && Number.isFinite(Number(g0.minimo)) && g0.minimo !== "" && g0.minimo !== null
+      ? { conto: g0.conto, data: g0.data, minimo: Number(g0.minimo) } : null;
+    if (!simOps.length) return { rows: [], goal: null, simCount: 0, goalDef: goal, real, sim };
+    // orizzonte: ultima data reale, obiettivo, voci una tantum, e 12 mesi dalla prima data delle voci periodiche
+    const cand = [];
+    if (real.entries.length) cand.push(real.entries[real.entries.length - 1].o.data);
+    if (goal) cand.push(goal.data);
+    for (const v of voci) cand.push(Number(v.ogni_mesi) > 0 ? monthEndPlus(v.data, 11) : v.data);
+    const endDate = monthEndPlus(cand.reduce((a, b) => (a > b ? a : b)), 0);
+    const first = simOps.reduce((a, o) => (o.data < a ? o.data : a), simOps[0].data);
+    const rows = [];
+    for (let cur = monthEndPlus(first, -1); cur <= endDate; cur = monthEndPlus(cur, 1)) {
+      rows.push({ mese: cur.slice(0, 7), real: balanceAt(real.entries, cfg, cur), sim: balanceAt(sim.entries, cfg, cur) });
+    }
+    let res = null;
+    if (goal) {
+      const s = pick(goal.conto, balanceAt(sim.entries, cfg, goal.data)), r = pick(goal.conto, balanceAt(real.entries, cfg, goal.data));
+      const margine = r2(s - goal.minimo);
+      res = { saldoSim: s, saldoReale: r, margine, ok: margine >= 0 };
+    }
+    return { rows, goal: res, goalDef: goal, simCount: simOps.length, endDate, minSim: minPoint(sim.entries, cfg, endDate), minReal: minPoint(real.entries, cfg, endDate), real, sim };
+  }
+
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);

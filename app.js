@@ -20,7 +20,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -73,12 +73,15 @@
   const normRule = (r) => ({ ...r, importo: Number(r.importo), ogni_mesi: Number(r.ogni_mesi), giorno: Number(r.giorno), data_fine: r.data_fine || null, attiva: r.attiva !== false });
 
   async function load() {
-    const [c, ops, rules] = await Promise.all([
+    const [c, sc, ops, rules] = await Promise.all([
       sb.from("config").select("dati").eq("id", "conti").maybeSingle(),
+      sb.from("config").select("dati").eq("id", "scenari").maybeSingle(),
       fetchAll(() => sb.from("ops").select("*").order("id")),
       fetchAll(() => sb.from("ricorrenze").select("*").order("id")),
     ]);
     if (c.error) throw c.error;
+    if (sc.error) throw sc.error;
+    state.scenari = sc.data && Array.isArray(sc.data.dati && sc.data.dati.scenari) ? sc.data.dati.scenari : [];
     state.cfg = { ...DEFAULT_CFG, ...(c.data ? c.data.dati : {}) };
     state.ops = ops.map(normOp);
     state.rules = rules.map(normRule);
@@ -123,6 +126,7 @@
       genFailed = true;
     }
     try { await load(); } catch (e) { showView("app"); await handleError(e, "Caricamento non riuscito. Controlla la connessione e riprova."); return; }
+    state.scenId = lsGet("conti-scen");
     const saved = lsGet("conti-tab");
     if (saved === "c1" || saved === "c2" || saved === "comune") state.tab = saved;
     showView("app"); render();
@@ -144,7 +148,7 @@
       if (session) {
         if (state.userId !== session.user.id) { state.userId = session.user.id; start(); }
       } else {
-        state.userId = null; state.ops = []; state.rules = []; showView("login");
+        state.userId = null; state.ops = []; state.rules = []; state.scenari = []; showView("login");
       }
     }, 0);
   });
@@ -177,7 +181,9 @@
     $("#btn-add").textContent = tab === "comune" ? "+ Aggiungi uscita comune" : `+ Aggiungi a ${cfg[tab].nome}`;
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
+    $("#sim-view").hidden = state.view !== "sim";
     if (state.view === "rules") { renderRules(); return; }
+    if (state.view === "sim") { renderSim(); return; }
     renderCards(); renderMonthly(); renderList();
   }
 
@@ -303,6 +309,8 @@
   $("#btn-start").addEventListener("click", openStart);
   $("#btn-csv").addEventListener("click", copyCsv);
   $("#btn-rules").addEventListener("click", () => { state.view = "rules"; state.confirmRule = null; render(); window.scrollTo(0, 0); });
+  $("#btn-sim").addEventListener("click", () => { state.view = "sim"; state.simConfirm = null; render(); window.scrollTo(0, 0); });
+  $("#sim-back").addEventListener("click", () => { state.view = "main"; state.simConfirm = null; render(); });
   $("#rules-back").addEventListener("click", () => { state.view = "main"; state.confirmRule = null; render(); });
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
 
@@ -647,6 +655,282 @@
     $("#dlg-rule").close();
     await reload();
   }
+
+  // ---------- simulazione ----------
+  // Gli scenari stanno nella tabella `config` (riga id = 'scenari'): nessuna tabella nuova.
+  // Si rilegge la riga prima di scrivere, così due persone non si sovrascrivono a vicenda.
+  async function saveScenari(mutate) {
+    const r = await sb.from("config").select("dati").eq("id", "scenari").maybeSingle();
+    if (r.error) throw r.error;
+    const dati = { ...(r.data ? r.data.dati : {}) };
+    dati.scenari = Array.isArray(dati.scenari) ? dati.scenari : [];
+    mutate(dati);
+    const w = await sb.from("config").upsert({ id: "scenari", dati, updated_at: nowIso() });
+    if (w.error) throw w.error;
+    state.scenari = dati.scenari;
+  }
+  async function simSave(mutate, okMsg) {
+    try { await saveScenari(mutate); } catch (e) {
+      await handleError(e, "Salvataggio non riuscito. Controlla la connessione e riprova."); return false;
+    }
+    if (okMsg) toast(okMsg);
+    renderSim(); return true;
+  }
+  const curScen = () => state.scenari.find((s) => s.id === state.scenId) || state.scenari[0] || null;
+  const contoSim = (k) => (k === "tot" ? "Conto 1 + Conto 2" : nomeConto(k));
+  const voceWhen = (v) => {
+    if (!(Number(v.ogni_mesi) > 0)) return `una volta il ${fmtData(v.data)}`;
+    const last = Calc.expandVoce(v).pop().data;
+    const n = Number(v.ogni_mesi);
+    return `${n === 1 ? "ogni mese" : n === 12 ? "ogni anno" : `ogni ${n} mesi`} dal ${fmtData(v.data)} · ${v.volte} volte (fino al ${fmtData(last)})`;
+  };
+
+  function renderSim() {
+    const body = $("#sim-body");
+    const sc = curScen();
+    if (!sc) { body.innerHTML = `<p class="empty">Nessuno scenario. Premi «+ Scenario» per crearne uno, per esempio «Acquisto casa».</p>`; return; }
+    state.scenId = sc.id;
+    const conf = state.simConfirm;
+    const opts = state.scenari.map((s) => `<option value="${esc(s.id)}"${s.id === sc.id ? " selected" : ""}>${esc(s.nome)}</option>`).join("");
+    const delAsk = conf && conf.type === "scen";
+    let h = `<div class="sim-bar"><select id="sim-sel" aria-label="Scenario">${opts}</select>
+      ${delAsk ? `<span class="confirm">Eliminare lo scenario «${esc(sc.nome)}»?</span>
+        <button type="button" class="btn danger sm" data-sact="scen-delok">Elimina</button>
+        <button type="button" class="btn sm" data-sact="cancel">Annulla</button>`
+      : `<button type="button" class="btn sm" data-sact="scen-edit">Nome e obiettivo</button>
+        <button type="button" class="btn sm" data-sact="scen-dup">Duplica</button>
+        <button type="button" class="btn sm" data-sact="scen-del">Elimina</button>`}</div>`;
+
+    const res = Calc.simulate(state.cfg, state.ops, sc);
+    const g = sc.obiettivo;
+
+    // verdetto
+    if (res.goalDef && res.goal) {
+      const gd = res.goalDef, gr = res.goal;
+      h += `<div class="card verdict ${gr.ok ? "ok" : "ko"}">
+        <div class="big">${gr.ok ? "✅ Ce la fai" : "❌ Non ci arrivi"} — ${esc(contoSim(gd.conto))} al ${fmtData(gd.data)}</div>
+        <div>Con lo scenario: <strong>${eur(gr.saldoSim)}</strong> · obiettivo ${eur(gd.minimo)} · ${gr.ok ? "margine" : "mancano"} <strong>${eur(Math.abs(gr.margine))}</strong></div>
+        <div class="sub">Senza scenario: ${eur(gr.saldoReale)}</div></div>`;
+    } else if (g && g.minimo !== "" && g.minimo != null) {
+      h += `<div class="card verdict"><div class="sub">Obiettivo incompleto: aggiungi conto, importo e data da «Nome e obiettivo», oppure aggiungi almeno una voce.</div></div>`;
+    } else {
+      h += `<div class="card verdict"><div class="sub">Nessun obiettivo. Impostalo da «Nome e obiettivo» per avere un verdetto.</div></div>`;
+    }
+
+    // voci
+    h += `<div class="sim-h"><h3>Voci dello scenario</h3><button type="button" class="btn primary sm" data-sact="voce-add">+ Voce</button></div>`;
+    const voci = sc.voci || [];
+    if (!voci.length) h += `<p class="empty">Nessuna voce. Aggiungine una, per esempio la caparra o la rata del mutuo.</p>`;
+    else {
+      h += `<ul class="rows">` + voci.map((v) => {
+        const sign = v.conto !== "comune" && v.tipo === "entrata" ? 1 : -1;
+        const on = v.attiva !== false;
+        const ask = conf && conf.type === "voce" && conf.id === v.id;
+        const act = ask
+          ? `<span class="confirm">Eliminare questa voce?</span>
+             <button type="button" class="btn danger sm" data-sact="voce-delok" data-id="${esc(v.id)}">Elimina</button>
+             <button type="button" class="btn sm" data-sact="cancel">Annulla</button>`
+          : `<button type="button" class="btn sm" data-sact="voce-edit" data-id="${esc(v.id)}">Modifica</button>
+             <button type="button" class="btn sm" data-sact="voce-del" data-id="${esc(v.id)}">Elimina</button>`;
+        return `<li class="row vrow${on ? "" : " off"}">
+          <label class="chk"><input type="checkbox" data-sact="voce-toggle" data-id="${esc(v.id)}"${on ? " checked" : ""} aria-label="Includi ${esc(v.voce)} nello scenario"></label>
+          <div><div class="v">${esc(v.voce)}</div>
+            <div class="tags"><span class="tag">${esc(nomeConto(v.conto))}</span></div>
+            <div class="sub">${voceWhen(v)}</div></div>
+          <div class="a"><div class="amt ${sign > 0 ? "pos" : "neg"}">${sgn(sign * Number(v.importo))}</div>${v.conto === "comune" ? `<div class="sub">metà per conto</div>` : ""}</div>
+          <div class="act">${act}</div></li>`;
+      }).join("") + `</ul>`;
+    }
+
+    // risultati
+    if (res.rows.length) {
+      const n = state.cfg;
+      const gd = res.goalDef;
+      const goalMonth = gd ? gd.data.slice(0, 7) : null;
+      const low = (k, row) => {
+        if (!gd || row.mese < goalMonth) return false;
+        const s = k === "tot" ? r2(row.sim.c1 + row.sim.c2) : row.sim[k];
+        return gd.conto === k && s < gd.minimo;
+      };
+      const cell = (v, extra) => `<td class="${(v < 0 ? "neg-cell " : "") + (extra || "")}">${eur(v)}</td>`;
+      const dif = (a, b) => { const d = r2(b - a); return `<td>${d === 0 ? "—" : sgn(d)}</td>`; };
+      h += `<div class="sim-h"><h3>Mese per mese</h3></div>
+        <section class="card scroll"><table><thead><tr><th>Fine mese</th>
+          <th>${esc(n.c1.nome)} reale</th><th>con scenario</th><th>diff.</th>
+          <th>${esc(n.c2.nome)} reale</th><th>con scenario</th><th>diff.</th></tr></thead><tbody>` +
+        res.rows.map((r) => `<tr class="${goalMonth === r.mese ? "goal-row" : ""}"><td>${fmtMese(r.mese)}</td>
+          ${cell(r.real.c1)}${cell(r.sim.c1, low("c1", r) ? "low-cell" : "")}${dif(r.real.c1, r.sim.c1)}
+          ${cell(r.real.c2)}${cell(r.sim.c2, low("c2", r) ? "low-cell" : "")}${dif(r.real.c2, r.sim.c2)}</tr>`).join("") +
+        `</tbody></table></section>
+        <p class="note">Punto più basso con lo scenario: ${esc(n.c1.nome)} <strong>${eur(res.minSim.c1.v)}</strong> (${fmtData(res.minSim.c1.d)}) · ${esc(n.c2.nome)} <strong>${eur(res.minSim.c2.v)}</strong> (${fmtData(res.minSim.c2.d)}).
+        Il calcolo arriva fino a ${fmtData(res.endDate)} e conta solo quello che è registrato: stipendi e spese non ancora inseriti non sono inclusi.</p>`;
+    }
+    body.innerHTML = h;
+  }
+
+  const newId = () => crypto.randomUUID();
+  $("#sim-body").addEventListener("change", async (e) => {
+    if (e.target.id === "sim-sel") { state.scenId = e.target.value; lsSet("conti-scen", state.scenId); state.simConfirm = null; renderSim(); return; }
+    const t = e.target.closest('input[data-sact="voce-toggle"]'); if (!t) return;
+    const id = t.dataset.id, on = t.checked;
+    await simSave((d) => { const s = d.scenari.find((x) => x.id === state.scenId); const v = s && s.voci.find((x) => x.id === id); if (v) v.attiva = on; });
+  });
+  $("#sim-body").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-sact]"); if (!b) return;
+    const a = b.dataset.sact, id = b.dataset.id, sc = curScen();
+    if (a === "cancel") { state.simConfirm = null; renderSim(); return; }
+    if (a === "voce-add") { openVoce(null); return; }
+    if (a === "voce-edit") { openVoce(sc.voci.find((v) => v.id === id)); return; }
+    if (a === "voce-del") { state.simConfirm = { type: "voce", id }; renderSim(); return; }
+    if (a === "voce-delok") { state.simConfirm = null; await simSave((d) => { const s = d.scenari.find((x) => x.id === sc.id); if (s) s.voci = s.voci.filter((v) => v.id !== id); }); return; }
+    if (a === "scen-edit") { openScen(sc); return; }
+    if (a === "scen-del") { state.simConfirm = { type: "scen" }; renderSim(); return; }
+    if (a === "scen-delok") {
+      state.simConfirm = null;
+      await simSave((d) => { d.scenari = d.scenari.filter((s) => s.id !== sc.id); });
+      state.scenId = state.scenari[0] ? state.scenari[0].id : null; renderSim(); return;
+    }
+    if (a === "scen-dup") {
+      const copy = { ...JSON.parse(JSON.stringify(sc)), id: newId(), nome: `${sc.nome} (copia)` };
+      copy.voci = copy.voci.map((v) => ({ ...v, id: newId() }));
+      if (await simSave((d) => { d.scenari.push(copy); }, "Scenario duplicato.")) { state.scenId = copy.id; lsSet("conti-scen", copy.id); renderSim(); }
+    }
+  });
+
+  // --- finestra scenario ---
+  let editingScen = null;
+  const scConto = $("#sc-conto");
+  function openScen(sc) {
+    editingScen = sc;
+    scConto.options[0].textContent = state.cfg.c1.nome; scConto.options[1].textContent = state.cfg.c2.nome;
+    $("#scen-title").textContent = sc ? "Nome e obiettivo" : "Nuovo scenario";
+    $("#sc-nome").value = sc ? sc.nome : "";
+    const g = sc && sc.obiettivo;
+    scConto.value = g && g.conto ? g.conto : "c1";
+    $("#sc-min").value = g && g.minimo !== "" && g.minimo != null ? String(g.minimo).replace(".", ",") : "";
+    $("#sc-data").value = g && g.data ? g.data : "";
+    $("#scen-msg").textContent = ""; $("#scen-save").disabled = false;
+    $("#dlg-scen").showModal();
+  }
+  $("#sim-new").addEventListener("click", () => openScen(null));
+  $("#scen-cancel").addEventListener("click", () => $("#dlg-scen").close());
+  $("#form-scen").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#scen-msg"); msg.textContent = "";
+    const nome = $("#sc-nome").value.trim(), minRaw = $("#sc-min").value.trim(), data = $("#sc-data").value;
+    if (!nome) { msg.textContent = "Scrivi un nome per lo scenario."; return; }
+    let obiettivo = null;
+    if (minRaw || data) {
+      const minimo = parseImporto(minRaw.replace(/^-/, ""));
+      if (Number.isNaN(minimo) || !data) { msg.textContent = "Per l'obiettivo servono importo e data (oppure lascia vuoti entrambi)."; return; }
+      obiettivo = { conto: scConto.value, minimo: /^\s*-/.test(minRaw) ? -minimo : minimo, data };
+    }
+    $("#scen-save").disabled = true;
+    const sc = editingScen;
+    const id = sc ? sc.id : newId();
+    const ok = await simSave((d) => {
+      const s = d.scenari.find((x) => x.id === id);
+      if (s) { s.nome = nome; s.obiettivo = obiettivo; } else d.scenari.push({ id, nome, obiettivo, voci: [] });
+    });
+    $("#scen-save").disabled = false;
+    if (!ok) { msg.textContent = "Salvataggio non riuscito. Controlla la connessione e riprova."; return; }
+    state.scenId = id; lsSet("conti-scen", id);
+    $("#dlg-scen").close(); renderSim();
+  });
+
+  // --- finestra voce ---
+  const SIM_TPL = {
+    mutuo: { voce: "Rata mutuo", conto: "comune", tipo: "uscita", ogni: "1", volte: 240 },
+    caparra: { voce: "Caparra", conto: "comune", tipo: "uscita", ogni: "0" },
+    notaio: { voce: "Notaio", conto: "comune", tipo: "uscita", ogni: "0" },
+    agenzia: { voce: "Agenzia", conto: "comune", tipo: "uscita", ogni: "0" },
+    imposte: { voce: "Imposte", conto: "comune", tipo: "uscita", ogni: "0" },
+    spesa: { voce: "Spesa", tipo: "uscita", ogni: "0" },
+    entrata: { voce: "Entrata", tipo: "entrata", ogni: "1", volte: 12 },
+  };
+  const SIM_QUICK = ["0", "1", "2", "3", "6", "12"];
+  const vConto = $("#v-conto"), vFreq = $("#v-freq");
+  let editingVoce = null;
+  function voceFromForm() {
+    const conto = vConto.value;
+    const ogni = vFreq.value === "altro" ? Number($("#v-ogni").value) : Number(vFreq.value);
+    return {
+      voce: $("#v-voce").value.trim(), conto, tipo: conto === "comune" ? "uscita" : $("#v-tipo").value,
+      importo: parseImporto($("#v-importo").value), data: $("#v-data").value, ogni_mesi: ogni,
+      volte: ogni > 0 ? Number($("#v-volte").value) : 1,
+    };
+  }
+  function updateVoceUi() {
+    $("#v-tipo-wrap").hidden = vConto.value === "comune";
+    $("#v-ogni").hidden = vFreq.value !== "altro";
+    const periodic = vFreq.value !== "0";
+    $("#v-volte-wrap").hidden = !periodic;
+    const v = voceFromForm();
+    const okDate = /^\d{4}-\d\d-\d\d$/.test(v.data);
+    let txt = "";
+    if (okDate && v.importo > 0) {
+      const imp = v.importo;
+      if (v.conto === "comune") txt = `Divisa: ${eur(r2(imp / 2))} su ${state.cfg.c1.nome} e ${eur(r2(imp - r2(imp / 2)))} su ${state.cfg.c2.nome}. `;
+      if (v.ogni_mesi > 0 && Number.isInteger(v.volte) && v.volte >= 1 && v.volte <= 600 && Number.isInteger(v.ogni_mesi) && v.ogni_mesi <= 24) {
+        const last = Calc.expandVoce({ ...v, id: "p" }).pop().data;
+        txt += `Totale ${eur(imp * v.volte)} in ${v.volte} volte, fino al ${fmtData(last)}.`;
+      }
+    }
+    $("#v-preview").textContent = txt;
+  }
+  ["v-conto", "v-freq"].forEach((id) => $("#" + id).addEventListener("change", updateVoceUi));
+  ["v-ogni", "v-volte", "v-data", "v-importo"].forEach((id) => $("#" + id).addEventListener("input", updateVoceUi));
+  $("#v-tpl").addEventListener("change", () => {
+    const t = SIM_TPL[$("#v-tpl").value]; if (!t) return;
+    if (t.voce) $("#v-voce").value = t.voce;
+    if (t.conto) vConto.value = t.conto;
+    if (t.tipo) $("#v-tipo").value = t.tipo;
+    if (t.ogni) { vFreq.value = t.ogni; $("#v-ogni").value = ""; }
+    if (t.volte) $("#v-volte").value = t.volte;
+    updateVoceUi();
+  });
+  function openVoce(v) {
+    editingVoce = v || null;
+    vConto.options[0].textContent = state.cfg.c1.nome; vConto.options[1].textContent = state.cfg.c2.nome;
+    $("#voce-title").textContent = v ? "Modifica voce" : "Nuova voce";
+    $("#v-tpl").value = ""; $("#v-tpl").hidden = !!v; document.querySelector('label[for="v-tpl"]').hidden = !!v;
+    vConto.value = v ? v.conto : "comune";
+    $("#v-voce").value = v ? v.voce : "";
+    $("#v-tipo").value = v ? v.tipo : "uscita";
+    $("#v-importo").value = v ? String(v.importo).replace(".", ",") : "";
+    $("#v-data").value = v ? v.data : localToday();
+    const ogni = v ? String(v.ogni_mesi || 0) : "0";
+    vFreq.value = SIM_QUICK.includes(ogni) ? ogni : "altro";
+    $("#v-ogni").value = SIM_QUICK.includes(ogni) ? "" : ogni;
+    $("#v-volte").value = v && v.ogni_mesi > 0 ? v.volte : 12;
+    $("#voce-msg").textContent = ""; $("#voce-save").disabled = false;
+    updateVoceUi();
+    $("#dlg-voce").showModal();
+  }
+  $("#voce-cancel").addEventListener("click", () => $("#dlg-voce").close());
+  $("#form-voce").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#voce-msg"); msg.textContent = "";
+    const v = voceFromForm();
+    if (!v.voce) { msg.textContent = "Scrivi una descrizione."; return; }
+    if (!(v.importo > 0)) { msg.textContent = "L'importo deve essere maggiore di zero."; return; }
+    if (!/^\d{4}-\d\d-\d\d$/.test(v.data)) { msg.textContent = "Scegli una data."; return; }
+    if (v.ogni_mesi > 0) {
+      if (!Number.isInteger(v.ogni_mesi) || v.ogni_mesi > 24) { msg.textContent = "Ogni quanti mesi: scegli un numero da 1 a 24."; return; }
+      if (!Number.isInteger(v.volte) || v.volte < 1 || v.volte > 600) { msg.textContent = "Il numero di volte deve essere da 1 a 600."; return; }
+    } else v.volte = 1;
+    $("#voce-save").disabled = true;
+    const id = editingVoce ? editingVoce.id : newId(), sid = state.scenId;
+    const ok = await simSave((d) => {
+      const s = d.scenari.find((x) => x.id === sid); if (!s) return;
+      s.voci = s.voci || [];
+      const cur = s.voci.find((x) => x.id === id);
+      if (cur) Object.assign(cur, v); else s.voci.push({ id, ...v, attiva: true });
+    });
+    $("#voce-save").disabled = false;
+    if (!ok) { msg.textContent = "Salvataggio non riuscito. Controlla la connessione e riprova."; return; }
+    $("#dlg-voce").close(); renderSim();
+  });
 
   // ---------- CSV ----------
   async function copyCsv() {
