@@ -222,7 +222,7 @@
   // ---------- Buste e fondi ----------
   // Dati (riga `config` id = 'budget'):
   //   fondi: [{ id, nome, conto: "c1"|"c2", iniziale, obiettivo }]
-  //   buste: [{ id, nome, tipo: "spesa"|"accumulo", conto: "c1"|"c2"|"comune", fondo, steps: [{ da: "AAAA-MM", importo }], fine }]
+  //   buste: [{ id, nome, tipo: "spesa"|"accumulo", conto: "c1"|"c2"|"comune", fondo, steps: [{ da: "AAAA-MM", importo }], fine, escluse: ["AAAA-MM"] }]
   //   spostamenti: [{ id, mese, da: bustaId, a: bustaId, importo }]   (copertura di una busta con il budget di un'altra)
   // `fondo`: per un accumulo è il fondo che riceve i soldi; per una spesa (facoltativo) è il fondo da cui si pagano.
   // Ogni uscita appartiene a una busta tramite `busta_id`. Non c'è riporto tra mesi: ogni mese riparte dal suo budget.
@@ -245,6 +245,7 @@
   // Importo base della busta nel mese: l'ultimo "da questo mese in poi" che vale, 0 dopo la fine.
   function bustaImporto(b, mese) {
     if (b.fine && mese > b.fine) return 0;
+    if ((b.escluse || []).includes(mese)) return 0; // tolta a mano da quel mese
     let imp = 0, da = "";
     for (const s of b.steps || []) if (s.da <= mese && s.da >= da) { imp = Number(s.importo) || 0; da = s.da; }
     return imp;
@@ -252,6 +253,7 @@
   // La busta si può scegliere per una spesa di questo mese: è iniziata e non è finita.
   function bustaAttiva(b, mese) {
     if (b.fine && mese > b.fine) return false;
+    if ((b.escluse || []).includes(mese)) return false;
     return (b.steps || []).some((s) => s.da <= mese);
   }
   // Budget del mese dopo le coperture (il totale tra le buste non cambia).

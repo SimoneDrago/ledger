@@ -33,7 +33,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, hide: false, riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, hide: false, riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, bmConfirm: null, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -223,23 +223,18 @@
     if (state.view === "bud") { renderBud(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
-    renderCards(); renderFondi(); renderMonthly(); renderList(); renderCatPanel();
+    renderCards(); renderMonthly(); renderList(); renderCatPanel();
   }
 
-  // Saldo a fine mese di un conto. Per i mesi chiusi è quello reale; dal mese in corso in poi è la previsione, che toglie
-  // quanto resta da spendere nelle buste di spesa (senza buste coincide con il saldo dopo l'ultima operazione).
-  function saldoFine(k, mese) {
-    const today = localToday();
-    if (mese < today.slice(0, 7) || !state.budget.buste.length) return Calc.balanceAt(state.entries, state.cfg, Calc.monthEndPlus(`${mese}-01`, 0))[k];
-    return Calc.previsto(state.budget, state.ops, state.entries, state.cfg, mese, k, today).previsto;
-  }
-  // Con le buste ogni mese, da oggi fino all'ultimo con operazioni, ha un saldo previsto anche se non ha ancora operazioni.
+  // Saldo a fine mese di un conto: quello reale, calcolato per data (operazioni registrate fino all'ultimo giorno del mese).
+  const saldoFine = (k, mese) => Calc.balanceAt(state.entries, state.cfg, Calc.monthEndPlus(`${mese}-01`, 0))[k];
+  // Con le buste ogni mese, da oggi per i prossimi dodici (o fino all'ultimo con operazioni), mostra le sue buste anche se
+  // non ha ancora operazioni.
   function withBudgetMonths(months) {
-    if (!state.budget.buste.length || !months.size) return months;
-    const tm = localToday().slice(0, 7), last = [...months.keys()].pop();
-    if (last < tm) return months;
-    const out = new Map(months);
-    for (let m = tm, n = 0; m <= last && n < 240; m = Calc.monthEndPlus(`${m}-01`, 1).slice(0, 7), n++) if (!out.has(m)) out.set(m, []);
+    if (!state.budget.buste.length) return months;
+    const tm = localToday().slice(0, 7), last = months.size ? [...months.keys()].pop() : tm, to12 = Calc.monthEndPlus(`${tm}-01`, 11).slice(0, 7);
+    const end = last > to12 ? last : to12, out = new Map(months);
+    for (let m = tm, n = 0; m <= end && n < 240; m = Calc.monthEndPlus(`${m}-01`, 1).slice(0, 7), n++) if (!out.has(m)) out.set(m, []);
     return new Map([...out].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
   }
 
@@ -249,8 +244,7 @@
     const now = Calc.balanceAt(state.entries, state.cfg, today);
     const lastDate = state.entries.length ? state.entries[state.entries.length - 1].o.data : null;
     const future = lastDate && lastDate > today;
-    const projMese = future ? lastDate.slice(0, 7) : state.budget.buste.length ? today.slice(0, 7) : null;
-    const proj = (k) => (projMese ? `fine ${fmtMese(projMese)}: ${mEur(saldoFine(k, projMese))}` : "");
+    const proj = (k) => (future ? `fine ${fmtMese(lastDate.slice(0, 7))}: ${mEur(state.cur[k])}` : "");
     const comuni = state.entries.filter((e) => e.o.conto === "comune");
     const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
@@ -319,24 +313,6 @@
     return m;
   }
 
-  // Fondi del conto aperto: quanto hanno accumulato, da quali buste arrivano, e quanto resta libero.
-  function renderFondi() {
-    const el = $("#fondi"), tab = state.tab, bud = state.budget;
-    const fondi = tab === "comune" ? [] : bud.fondi.filter((f) => f.conto === tab);
-    if (!fondi.length) { el.innerHTML = ""; return; }
-    const today = localToday(), tm = today.slice(0, 7), M = (v) => (state.hide ? MASK : eur(v));
-    const lib = Calc.libero(bud, state.ops, state.entries, state.cfg, tab, today);
-    const rows = fondi.map((f) => {
-      const s = Calc.fondoSaldo(bud, f, state.ops, today);
-      const da = bud.buste.filter((b) => b.tipo === "accumulo" && b.fondo === f.id && Calc.bustaAttiva(b, tm))
-        .map((b) => `${esc(b.nome)} · ${M(Calc.bustaBudget(bud, b, tm))} al mese`).join(" · ");
-      return `<div class="fx-row"><div class="bc-nm">${esc(f.nome)}<small>${da ? `Alimentato da ${da}` : "Nessuna busta lo alimenta"}</small></div>
-        <div class="bc-v"><strong>${M(s.saldo)}</strong>${s.inArrivo ? `<small>+${M(s.inArrivo)} a fine mese</small>` : ""}</div></div>`;
-    }).join("");
-    el.innerHTML = `<div class="card fondi-box"><div class="fx-h"><h3>Fondi · ${esc(cname(tab))}</h3><span>Libero <strong>${M(lib.libero)}</strong></span></div>${rows}
-      <p class="note" style="margin:6px 0 0">I fondi sono una parte del conto messa da parte: i soldi sono sul conto, ma non sono liberi.</p></div>`;
-  }
-
   function renderMonthly() {
     const tab = state.tab;
     let h;
@@ -353,22 +329,88 @@
         <tbody>${rows}<tr class="tot"><td>Totale</td><td>${eur(t)}</td><td>${eur(a)}</td><td>${eur(b)}</td></tr></tbody></table>`;
     } else {
       const months = withBudgetMonths(groupByMonth(state.entries.filter((e) => e.o.conto === tab || e.o.conto === "comune")));
-      const today = localToday(), tm = today.slice(0, 7), hasBud = state.budget.buste.length > 0;
-      const now = hasBud ? Calc.balanceAt(state.entries, state.cfg, today)[tab] : 0;
       const rows = [...months].map(([k, es]) => {
         let ent = 0, usc = 0, com = 0;
         for (const e of es) {
           const v = e.p[tab];
           if (e.o.conto === "comune") com += -v; else if (v > 0) ent += v; else usc += -v;
         }
-        // con le buste, dal mese in corso il saldo è previsto; nel mese in corso si vede anche quello di oggi
-        const sub = hasBud && k >= tm ? `<small class="prev">${k === tm ? `previsto · oggi ${mEur(now)}` : "previsto"}</small>` : "";
-        return `<tr><td>${fmtMese(k)}</td><td>${mEur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${mEur(saldoFine(tab, k))}</strong>${sub}</td></tr>`;
+        return `<tr><td>${fmtMese(k)}</td><td>${mEur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${mEur(saldoFine(tab, k))}</strong></td></tr>`;
       }).join("");
       h = `<table><thead><tr><th>Mese</th><th>Entrate</th><th>Uscite</th><th>Conto comune</th><th>Saldo fine mese</th></tr></thead>
         <tbody><tr><td>Partenza</td><td colspan="3"></td><td><strong>${mEur(state.cfg[tab].iniziale)}</strong></td></tr>${rows}</tbody></table>`;
     }
     $("#monthly").innerHTML = h;
+  }
+
+  // Le buste dentro ogni mese della sezione Conti: lo stipendio (entrate del mese), le spese che lo riducono, il budget di
+  // ogni busta e, per l'accumulo, il fondo accumulato fino al mese prima più il budget assegnato in questo mese.
+  function monthBuste(tab, k) {
+    const bud = state.budget;
+    if (!bud.buste.length) return "";
+    const hide = state.hide, M = (v) => (hide ? MASK : eur(v)), personal = tab !== "comune";
+    const mine = (b) => (personal ? b.conto === tab || b.conto === "comune" : b.conto === "comune");
+    const plan = Calc.monthPlan(bud, state.ops, k, personal ? tab : "tot");
+    const righe = plan.righe.filter((r) => mine(r.busta));
+    const rimosse = bud.buste.filter((b) => mine(b) && (b.escluse || []).includes(k));
+    if (!righe.length && !rimosse.length) return "";
+    let usc = 0;
+    if (personal) for (const e of state.entries) if (e.o.data.slice(0, 7) === k && e.p[tab] < 0) usc = r2(usc - e.p[tab]);
+    let h = `<div class="mbuste">`;
+    if (personal) {
+      const neg = plan.daAssegnare < 0 && !hide;
+      h += `<div class="mb-sum"><div><span>Stipendio</span><strong>${plan.entrate > 0 ? M(plan.entrate) : "—"}</strong></div>
+        <div><span>Speso</span><strong>${eur(usc)}</strong></div>
+        <div><span>Rimasto dallo stipendio</span><strong>${plan.entrate > 0 ? M(r2(plan.entrate - usc)) : "—"}</strong></div>
+        <div><span>Assegnato alle buste</span><strong>${M(plan.assegnato)}</strong></div>
+        <div class="${neg ? "neg" : ""}"><span>Da assegnare</span><strong>${plan.entrate > 0 ? M(plan.daAssegnare) : "—"}</strong></div></div>`;
+    }
+    h += righe.map((r) => {
+      const b = r.busta, conf = state.bmConfirm === `${b.id}|${k}`;
+      const tag = b.conto === "comune" && personal ? ` <small>· Conto comune, metà ciascuno</small>` : "";
+      const fondo = b.fondo ? bud.fondi.find((f) => f.id === b.fondo) : null;
+      const rem = conf
+        ? `<span class="confirm">Togliere dal mese?</span><button type="button" class="btn danger sm" data-bm="remok" data-id="${esc(b.id)}" data-month="${k}">Sì</button><button type="button" class="btn sm" data-bm="no">No</button>`
+        : `<button type="button" class="btn sm" data-bm="edit" data-id="${esc(b.id)}" data-month="${k}">Modifica</button><button type="button" class="btn sm" data-bm="rem" data-id="${esc(b.id)}" data-month="${k}">Rimuovi dal mese</button>`;
+      if (b.tipo === "accumulo") {
+        const s = fondo ? Calc.fondoSaldo(bud, fondo, state.ops, `${k}-01`) : null;
+        return `<div class="mb-row acc"><div class="mb-top"><span class="mb-nm">${esc(b.nome)}<small>Accumulo${fondo ? ` → ${esc(fondo.nome)}` : ""}</small></span><span class="mb-v"><strong>${M(r.budget)}</strong><small>budget del mese</small></span></div>
+          ${s ? `<p class="mb-fondo">Fondo accumulato fino al mese scorso: <strong>${M(s.saldo)}</strong> · questo mese assegni <strong>${M(r.budget)}</strong></p>` : ""}
+          <div class="mb-act">${rem}</div></div>`;
+      }
+      const pct = r.budget > 0 ? Math.min(100, (r.speso / r.budget) * 100) : r.speso > 0 ? 100 : 0;
+      const foot = r.stato === "over"
+        ? `<p class="mb-foot over">⚠ Superi il budget di ${eur(r.over)}: prendi budget da un'altra busta. <button type="button" class="btn sm danger" data-bm="copri" data-id="${esc(b.id)}" data-month="${k}">Copri</button></p>`
+        : `<p class="mb-foot">${r.stato === "warn" ? "Quasi finito · " : ""}restano ${eur(r.residuo)}</p>`;
+      return `<div class="mb-row st-${r.stato}"><div class="mb-top"><span class="mb-nm">${esc(b.nome)}${tag}<small>Spesa</small></span><span class="mb-v"><strong>${eur(r.speso)}</strong><small>su ${eur(r.budget)}</small></span></div>
+        <div class="bar" role="img" aria-label="${esc(b.nome)}: speso ${eur(r.speso)} su ${eur(r.budget)}"><i style="width:${pct.toFixed(1)}%"></i></div>${foot}<div class="mb-act">${rem}</div></div>`;
+    }).join("");
+    if (rimosse.length) h += `<p class="mb-rim">Tolte da questo mese: ${rimosse.map((b) => `${esc(b.nome)} <button type="button" class="btn link sm" data-bm="res" data-id="${esc(b.id)}" data-month="${k}">Rimetti</button>`).join(" · ")}</p>`;
+    return h + `</div>`;
+  }
+  async function monthBustaAction(a, id, k) {
+    const b = state.budget.buste.find((x) => x.id === id);
+    if (a === "no") { state.bmConfirm = null; renderList(); return; }
+    if (a === "rem") {
+      if (state.hide) { hiddenWarn("le buste"); return; }
+      if (b && b.tipo === "spesa" && Calc.bustaSpeso(state.ops, b, k) > 0) { toast("In questa busta ci sono spese registrate in questo mese: assegnale a un'altra busta prima di toglierla."); return; }
+      state.bmConfirm = `${id}|${k}`; renderList(); return;
+    }
+    if (a === "remok" || a === "res") {
+      if (state.hide) { hiddenWarn("le buste"); return; }
+      state.bmConfirm = null;
+      const ok = await saveBudget((d) => {
+        const x = d.buste.find((y) => y.id === id); if (!x) return;
+        const set = new Set(x.escluse || []);
+        if (a === "remok") { set.add(k); d.spostamenti = d.spostamenti.filter((s) => !(s.mese === k && (s.da === id || s.a === id))); } else set.delete(k);
+        x.escluse = [...set].sort();
+      }, a === "remok" ? "Busta tolta da questo mese." : "Busta rimessa nel mese.");
+      if (ok) render();
+      return;
+    }
+    state.bud.mese = k;
+    if (a === "edit") openBusta(b);
+    else if (a === "copri") openCopri(id);
   }
 
   function rowHtml(e, tab) {
@@ -412,7 +454,7 @@
     const filter = (e) => (tab === "comune" ? e.o.conto === "comune" : e.o.conto === tab || e.o.conto === "comune");
     let arr = state.entries.filter(filter);
     if (state.showAnn) arr = arr.concat(state.annEntries.filter(filter)).sort((a, b) => Calc.cmp(a.o, b.o));
-    const months = tab === "comune" ? groupByMonth(arr) : withBudgetMonths(groupByMonth(arr));
+    const months = withBudgetMonths(groupByMonth(arr));
     let h = tab === "comune" ? "" : `<div class="month"><div class="mhead"><span>Saldo di partenza · ${fmtData(state.cfg.dataInizio)}</span><span>${mEur(state.cfg[tab].iniziale)}</span></div></div>`;
     if (!months.size) h += `<p class="empty">Nessuna operazione.</p>`;
     else h += `<div class="mbar"><button type="button" class="btn sm" data-mall="open">Espandi tutto</button><button type="button" class="btn sm" data-mall="close">Comprimi tutto</button></div>`;
@@ -429,13 +471,13 @@
         else if (e.p[tab] > 0) ent += e.p[tab]; else usc += -e.p[tab];
       }
       const tot = tab === "comune" ? `uscite ${eur(usc)}` : `entrate ${mEur(ent)} · uscite ${eur(usc)}`;
-      const sf = tab === "comune" ? null : saldoFine(tab, k), prev = state.budget.buste.length > 0 && k >= tm;
-      const foot = sf === null ? "" : `<div class="mfoot">Saldo fine mese${prev ? " previsto" : ""}: <strong>${mEur(sf)}</strong></div>`;
+      const sf = tab === "comune" ? null : saldoFine(tab, k);
+      const foot = sf === null ? "" : `<div class="mfoot">Saldo fine mese: <strong>${mEur(sf)}</strong></div>`;
       const open = isOpen(k);
       const saldo = sf === null ? "" : ` · saldo ${mEur(sf)}`;
       h += `<div class="month"><button type="button" class="mhead" data-month="${k}" aria-expanded="${open}">
           <span><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span> ${fmtMese(k)}</span><span class="tot">${tot}${open ? "" : saldo}</span></button>
-        ${open ? `<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
+        ${open ? `${monthBuste(tab, k)}<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
     }
     $("#list").innerHTML = h;
     updatePinned();
@@ -528,6 +570,8 @@
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
 
   $("#list").addEventListener("click", async (e) => {
+    const bm = e.target.closest("[data-bm]");
+    if (bm) { monthBustaAction(bm.dataset.bm, bm.dataset.id, bm.dataset.month); return; }
     const mo = e.target.closest("[data-month]");
     if (mo) {
       const k = mo.dataset.month, cur = state.open ? new Set(state.open) : new Set([...document.querySelectorAll("#list button.mhead[aria-expanded=true]")].map((x) => x.dataset.month));
@@ -599,6 +643,7 @@
   fBusta.addEventListener("change", () => { fBusta.dataset.pick = fBusta.value; refreshBusta(); });
   $("#f-tipo").addEventListener("change", updateOpUi);
   $("#f-data").addEventListener("change", updateOpUi);
+  $("#f-data").addEventListener("input", updateOpUi);
   function updateOpUi() {
     const comune = fConto.value === "comune";
     $("#f-tipo-wrap").hidden = comune;
@@ -1164,7 +1209,7 @@
     else if (a === "copri") openCopri(id);
     else if (a === "undo") {
       if (state.hide) { hiddenWarn("i budget"); return; }
-      saveBudget((d) => { d.spostamenti = d.spostamenti.filter((x) => x.id !== id); }, "Spostamento annullato.").then((ok) => { if (ok) renderBud(); });
+      saveBudget((d) => { d.spostamenti = d.spostamenti.filter((x) => x.id !== id); }, "Spostamento annullato.").then((ok) => { if (ok) render(); });
     }
   });
 
@@ -1232,7 +1277,7 @@
       }
     }, old ? "Busta aggiornata." : "Busta creata.");
     $("#bu-save").disabled = false;
-    if (ok) { $("#dlg-busta").close(); renderBud(); }
+    if (ok) { $("#dlg-busta").close(); render(); }
   });
   $("#bu-del").addEventListener("click", async () => {
     const old = state.editingBusta, msg = $("#bu-msg");
@@ -1240,7 +1285,7 @@
     if (state.ops.some((o) => o.busta_id === old.id) || state.rules.some((r) => r.busta_id === old.id)) { msg.textContent = "Ha operazioni o ricorrenze collegate: non si può eliminare. Imposta «Ultimo mese» per chiuderla."; return; }
     if (!state.buDel) { state.buDel = true; $("#bu-del").textContent = "Conferma eliminazione"; return; }
     const ok = await saveBudget((d) => { d.buste = d.buste.filter((b) => b.id !== old.id); d.spostamenti = d.spostamenti.filter((x) => x.da !== old.id && x.a !== old.id); }, "Busta eliminata.");
-    if (ok) { $("#dlg-busta").close(); renderBud(); }
+    if (ok) { $("#dlg-busta").close(); render(); }
   });
 
   // ----- fondo -----
@@ -1272,7 +1317,7 @@
       else { const f = d.fondi.find((x) => x.id === old.id); if (f) { f.nome = nome; f.iniziale = r2(ini); } }
     }, old ? "Fondo aggiornato." : "Fondo creato.");
     $("#fo-save").disabled = false;
-    if (ok) { $("#dlg-fondo").close(); renderBud(); }
+    if (ok) { $("#dlg-fondo").close(); render(); }
   });
   $("#fo-del").addEventListener("click", async () => {
     const old = state.editingFondo, msg = $("#fo-msg");
@@ -1280,7 +1325,7 @@
     if (state.budget.buste.some((b) => b.fondo === old.id)) { msg.textContent = "Ci sono buste collegate a questo fondo: cambiale o eliminale prima."; return; }
     if (!state.foDel) { state.foDel = true; $("#fo-del").textContent = "Conferma eliminazione"; return; }
     const ok = await saveBudget((d) => { d.fondi = d.fondi.filter((f) => f.id !== old.id); }, "Fondo eliminato.");
-    if (ok) { $("#dlg-fondo").close(); renderBud(); }
+    if (ok) { $("#dlg-fondo").close(); render(); }
   });
 
   // ----- copri una busta con il budget di un'altra -----
@@ -1316,7 +1361,7 @@
     $("#cv-save").disabled = true;
     const ok = await saveBudget((d) => { d.spostamenti.push({ id: crypto.randomUUID(), mese: c.mese, da: da.b.id, a: c.dest.id, importo: r2(imp) }); }, "Budget spostato.");
     $("#cv-save").disabled = false;
-    if (ok) { $("#dlg-copri").close(); renderBud(); }
+    if (ok) { $("#dlg-copri").close(); render(); }
   });
 
   // ---------- simulazione ----------

@@ -137,4 +137,15 @@ assert.strictEqual(C.libero(C.emptyBudget(), ops0, e0, cfg, "c1", today).libero,
 const copia = JSON.stringify([bud, ops0]);
 C.monthPlan(bud, ops0, "2026-11", "c1"); C.previsto(bud, ops0, e0, cfg, "2026-11", "c1", today); C.fondoSaldo(bud, bud.fondi[0], ops0, today);
 assert.strictEqual(JSON.stringify([bud, ops0]), copia);
+
+// BUSTA TOLTA DA UN MESE (escluse): in quel mese non esiste, negli altri sì
+const budEsc = C.normBudget({ ...bud, buste: [{ ...bud.buste[0], steps: [{ da: "2026-11", importo: 500 }], escluse: ["2026-12"] }, { ...bud.buste[1], escluse: ["2026-11"] }] });
+assert.deepStrictEqual(["2026-11", "2026-12", "2027-01"].map((m) => C.bustaImporto(budEsc.buste[0], m)), [500, 0, 500]);
+assert.deepStrictEqual(["2026-11", "2026-12", "2027-01"].map((m) => C.bustaAttiva(budEsc.buste[0], m)), [true, false, true]);
+assert.strictEqual(C.monthPlan(budEsc, ops0, "2026-12", "c1").righe.some((r) => r.busta.id === "bs"), false);
+assert.strictEqual(C.monthPlan(budEsc, ops0, "2026-11", "c1").righe.some((r) => r.busta.id === "bs"), true);
+// un accumulo tolto da un mese non versa nulla nel fondo per quel mese
+const fe = C.fondoSaldo(budEsc, bud.fondi[0], ops0, "2027-01-01");
+assert.strictEqual(fe.versato, 150 * 3); // da settembre a dicembre senza novembre: settembre, ottobre, dicembre
+assert.strictEqual(C.fondoSaldo(bud, bud.fondi[0], ops0, "2027-01-01").versato, 150 * 4); // senza esclusioni: anche novembre
 console.log("ok: budget");
