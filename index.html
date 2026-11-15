@@ -71,13 +71,17 @@
       <button role="tab" data-tab="comune" id="tab-comune">Conto comune</button>
     </nav>
 
+    <div class="seg vm-seg" role="group" aria-label="Vista">
+      <button type="button" class="seg-b" data-vm="ops" aria-pressed="true">Operazioni</button>
+      <button type="button" class="seg-b" data-vm="sum" aria-pressed="false">Riepilogo</button>
+    </div>
+
     <section class="card scroll" id="monthly" aria-label="Riepilogo mensile"></section>
 
     <div class="actions">
       <button class="btn primary" id="btn-add" type="button"></button>
       <button class="btn" id="btn-rules" type="button">🔁 Ricorrenti</button>
       <button class="btn" id="btn-bud" type="button">✉️ Buste</button>
-      <button class="btn" id="btn-cat" type="button">📊 Categorie</button>
       <button class="btn" id="btn-sim" type="button">🧪 Simulazione</button>
       <button class="btn" id="btn-rec" type="button">⚖️ Riconcilia</button>
       <button class="btn" id="btn-start" type="button">Saldi di partenza</button>
@@ -90,13 +94,12 @@
 
     <aside class="card side" id="cat-panel" aria-label="Spese per categoria">
       <div class="side-h">
-        <h3>Spese per categoria</h3>
+        <h3>Riepilogo per categoria</h3>
         <label class="visually-hidden" for="cp-per">Periodo</label>
         <select id="cp-per"></select>
       </div>
       <div class="side-sub" id="cp-conto"></div>
       <div id="cp-body"></div>
-      <button class="btn sm" id="cp-open" type="button">Apri la vista completa</button>
     </aside>
     </div>
     </div>
@@ -117,35 +120,10 @@
         <h2>Buste</h2>
         <span aria-hidden="true"></span>
       </div>
-      <div class="seg vseg" role="group" aria-label="Sezione">
-        <button type="button" class="seg-b" data-vs="bud">Buste</button>
-        <button type="button" class="seg-b" data-vs="cat">Categorie</button>
-      </div>
       <div class="bud-ctl" id="bud-ctl"></div>
       <div id="bud-body"></div>
     </div>
 
-    <div id="cat-view" hidden>
-      <div class="rules-head">
-        <button class="btn" id="cat-back" type="button">← Indietro</button>
-        <h2>Spese per categoria</h2>
-        <span aria-hidden="true"></span>
-      </div>
-      <div class="seg vseg" role="group" aria-label="Sezione">
-        <button type="button" class="seg-b" data-vs="bud">Buste</button>
-        <button type="button" class="seg-b" data-vs="cat">Categorie</button>
-      </div>
-      <div class="cat-ctl">
-        <label class="visually-hidden" for="cat-conto">Conto</label>
-        <select id="cat-conto">
-          <option value="tot"></option>
-          <option value="c1"></option>
-          <option value="c2"></option>
-        </select>
-        <label class="visually-hidden" for="cat-per">Periodo</label>
-        <select id="cat-per"></select>
-      </div>
-      <div id="cat-body"></div>
     </div>
 
     <div id="sim-view" hidden>

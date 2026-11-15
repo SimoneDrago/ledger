@@ -33,7 +33,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, hide: false, mainVm: "ops", riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -219,9 +219,9 @@
     $("#main-view").hidden = state.view !== "main";
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
-    $("#cat-view").hidden = state.view !== "cat";
     $("#bud-view").hidden = state.view !== "bud";
-    if (state.view === "cat") { renderCat(); return; }
+    document.querySelector(".main-grid").dataset.vm = state.mainVm;
+    document.querySelectorAll("[data-vm]").forEach((b) => { if (b.matches("button")) b.setAttribute("aria-pressed", String(b.dataset.vm === state.mainVm)); });
     if (state.view === "bud") { renderBud(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
@@ -440,15 +440,13 @@
   // barra di navigazione in basso (telefono)
   // Cambio pagina: la vecchia esce sfumando da un lato, la nuova entra dall'altro con una leggera zoomata
   // (la direzione segue l'ordine della barra). Senza animazioni disponibili o con "riduci movimento" il cambio è immediato.
-  const VIEW_ORDER = ["main", "bud", "cat", "rules", "sim"];
-  const NAVPOS = { main: 0, bud: 1, cat: 1, rules: 3, sim: 4 };
+  const VIEW_ORDER = ["main", "bud", "rules", "sim"];
+  const NAVPOS = { main: 0, bud: 1, rules: 3, sim: 4 };
   const viewEl = (v) => $("#" + v + "-view");
   let navTok = 0;
   function markNav(view) {
-    const navView = view === "cat" ? "bud" : view;
-    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === navView ? "page" : "false"));
+    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === view ? "page" : "false"));
     $("#bnav").style.setProperty("--i", String(NAVPOS[view] ?? 0));
-    document.querySelectorAll("[data-vs]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.vs === view)));
     // il "+" compie l'azione di creazione della pagina in cui ti trovi
     const add = $("#bnav-add");
     if (add) {
@@ -483,11 +481,10 @@
     return !reduce && typeof requestAnimationFrame === "function";
   }
   $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
-  // selettore «Buste | Categorie» in cima alle due sezioni
-  document.addEventListener("click", (e) => { const b = e.target.closest("[data-vs]"); if (b) go(b.dataset.vs); });
   $("#btn-sim").addEventListener("click", () => go("sim"));
   $("#btn-bud").addEventListener("click", () => go("bud"));
   $("#bud-back").addEventListener("click", () => go("main"));
+  $(".vm-seg").addEventListener("click", (e) => { const b = e.target.closest("[data-vm]"); if (!b) return; state.mainVm = b.dataset.vm; render(); });
   $("#sim-back").addEventListener("click", () => go("main"));
   $("#rules-back").addEventListener("click", () => go("main"));
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
@@ -1130,7 +1127,7 @@
     else if (a === "undo") {
       if (state.hide) { hiddenWarn("i budget"); return; }
       saveBudget((d) => { d.spostamenti = d.spostamenti.filter((x) => x.id !== id); }, "Spostamento annullato.").then((ok) => { if (ok) renderBud(); });
-    } else if (a === "cat") go("cat");
+    }
   });
 
   // ----- busta -----
@@ -1688,25 +1685,6 @@
 
   // ---------- spese per categoria ----------
   const catColor = (name) => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 62% 52%)`; };
-  $("#btn-cat").addEventListener("click", () => go("cat"));
-  $("#cat-back").addEventListener("click", () => go("main"));
-  $("#cat-conto").addEventListener("change", (e) => { state.catConto = e.target.value; renderCat(); });
-  $("#cat-per").addEventListener("change", (e) => { state.catPer = e.target.value; renderCat(); });
-
-  function renderCat() {
-    const { cfg } = state, today = localToday(), tm = today.slice(0, 7);
-    const sel = $("#cat-conto");
-    sel.options[0].textContent = `${cname("c1")} + ${cname("c2")}`; sel.options[1].textContent = cname("c1"); sel.options[2].textContent = cname("c2");
-    sel.value = state.catConto;
-    // periodi: tutto il periodo + ogni mese con operazioni
-    const keys = [...new Set(state.entries.map((e) => e.o.data.slice(0, 7)))].sort();
-    if (state.catPer !== "all" && !keys.includes(state.catPer)) state.catPer = keys.includes(tm) ? tm : (keys.find((k) => k > tm) || keys[keys.length - 1] || "all");
-    $("#cat-per").innerHTML = `<option value="all">Tutto il periodo</option>` +
-      keys.map((k) => `<option value="${k}">${fmtMese(k)}${k > tm ? " (previsto)" : ""}</option>`).join("");
-    $("#cat-per").value = state.catPer;
-
-    $("#cat-body").innerHTML = catBlock(state.catConto, state.catPer, tm);
-  }
 
   // Riepilogo delle uscite per categoria (HTML) per un conto ("c1" | "c2" | "tot") e un periodo ("all" o "YYYY-MM")
   function catBlock(conto, per, tm) {
@@ -1754,7 +1732,6 @@
     $("#cp-body").innerHTML = catBlock(conto, state.panelPer, tm);
   }
   $("#cp-per").addEventListener("change", (e) => { state.panelPer = e.target.value; renderCatPanel(); });
-  $("#cp-open").addEventListener("click", () => { state.catConto = state.tab === "comune" ? "tot" : state.tab; state.catPer = state.panelPer; go("cat"); });
 
   // ---------- CSV ----------
   async function copyCsv() {
