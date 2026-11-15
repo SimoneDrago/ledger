@@ -1134,10 +1134,11 @@
     if (tipo === "accumulo" && sel.value === "comune") sel.value = "c1";
     const fondi = state.budget.fondi.filter((f) => f.conto === sel.value);
     const keep = fondoSel !== undefined ? fondoSel : $("#bu-fondo").value;
-    $("#bu-fondo").innerHTML = (tipo === "spesa" ? `<option value="">Nessuno (esce dal conto)</option>` : fondi.length ? "" : `<option value="">Crea prima un fondo per questo conto</option>`) +
+    // il fondo si sceglie solo per le buste di accumulo: una busta di spesa non è legata a nessun fondo
+    $("#bu-fondo-wrap").hidden = tipo !== "accumulo";
+    $("#bu-fondo").innerHTML = (fondi.length ? "" : `<option value="">Crea prima un fondo per questo conto</option>`) +
       fondi.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
     $("#bu-fondo").value = fondi.some((f) => f.id === keep) ? keep : tipo === "accumulo" && fondi.length ? fondi[0].id : "";
-    $("#bu-fondo-lbl").textContent = tipo === "accumulo" ? "Fondo che riceve i soldi" : "Paga dal fondo (facoltativo)";
     $("#bu-tipo").disabled = !!old; sel.disabled = !!old;
     $("#bu-hint").textContent = (tipo === "accumulo"
       ? "I soldi restano sul conto ma sono messi da parte: a fine mese vanno nel fondo. Non sono una spesa."
@@ -1168,7 +1169,7 @@
     const msg = $("#bu-msg"); msg.textContent = "";
     const old = state.editingBusta, mese = budMese();
     const nome = $("#bu-nome").value.trim().slice(0, 60), tipo = old ? old.tipo : $("#bu-tipo").value, conto = old ? old.conto : $("#bu-conto").value;
-    const fondo = $("#bu-fondo").value || null, imp = parseImporto($("#bu-importo").value), fine = $("#bu-fine").value || null;
+    const fondo = tipo === "accumulo" ? $("#bu-fondo").value || null : null, imp = parseImporto($("#bu-importo").value), fine = $("#bu-fine").value || null;
     if (!nome) { msg.textContent = "Scrivi un nome."; return; }
     if (Number.isNaN(imp) || imp < 0) { msg.textContent = "Scrivi il budget del mese (anche 0)."; return; }
     if (tipo === "accumulo" && !fondo) { msg.textContent = "Scegli il fondo che riceve i soldi (creane uno con «+ Fondo»)."; return; }
