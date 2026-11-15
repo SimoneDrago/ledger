@@ -118,6 +118,7 @@
       ordine: 0,
       modificata: false,
       annullata: false,
+      ...(rule.busta_id ? { busta_id: rule.busta_id } : {}),
     };
   }
 

@@ -33,7 +33,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, riconc: { c1: [], c2: [] }, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -86,10 +86,11 @@
   const normRule = (r) => ({ ...r, importo: Number(r.importo), ogni_mesi: Number(r.ogni_mesi), giorno: Number(r.giorno), data_fine: r.data_fine || null, attiva: r.attiva !== false });
 
   async function load() {
-    const [c, sc, rc, ops, rules] = await Promise.all([
+    const [c, sc, rc, bd, ops, rules] = await Promise.all([
       sb.from("config").select("dati").eq("id", "conti").maybeSingle(),
       sb.from("config").select("dati").eq("id", "scenari").maybeSingle(),
       sb.from("config").select("dati").eq("id", "riconciliazioni").maybeSingle(),
+      sb.from("config").select("dati").eq("id", "budget").maybeSingle(),
       fetchAll(() => sb.from("ops").select("*").order("id")),
       fetchAll(() => sb.from("ricorrenze").select("*").order("id")),
     ]);
@@ -98,6 +99,7 @@
     // le verifiche sono un di più: se la riga non si legge, l'app funziona lo stesso
     const rd = !rc.error && rc.data && rc.data.dati ? rc.data.dati : {};
     state.riconc = { c1: Array.isArray(rd.c1) ? rd.c1 : [], c2: Array.isArray(rd.c2) ? rd.c2 : [] };
+    state.budget = Calc.normBudget(!bd.error && bd.data ? bd.data.dati : null);
     state.scenari = sc.data && Array.isArray(sc.data.dati && sc.data.dati.scenari) ? sc.data.dati.scenari : [];
     state.cfg = { ...DEFAULT_CFG, ...(c.data ? c.data.dati : {}) };
     state.ops = ops.map(normOp);
@@ -218,7 +220,9 @@
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
     $("#cat-view").hidden = state.view !== "cat";
+    $("#bud-view").hidden = state.view !== "bud";
     if (state.view === "cat") { renderCat(); return; }
+    if (state.view === "bud") { renderBud(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
     renderCards(); renderMonthly(); renderList(); renderCatPanel();
@@ -436,22 +440,24 @@
   // barra di navigazione in basso (telefono)
   // Cambio pagina: la vecchia esce sfumando da un lato, la nuova entra dall'altro con una leggera zoomata
   // (la direzione segue l'ordine della barra). Senza animazioni disponibili o con "riduci movimento" il cambio è immediato.
-  const VIEW_ORDER = ["main", "cat", "rules", "sim"];
+  const VIEW_ORDER = ["main", "bud", "cat", "rules", "sim"];
+  const NAVPOS = { main: 0, bud: 1, cat: 1, rules: 3, sim: 4 };
   const viewEl = (v) => $("#" + v + "-view");
   let navTok = 0;
   function markNav(view) {
-    const i = VIEW_ORDER.indexOf(view);
-    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === view ? "page" : "false"));
-    $("#bnav").style.setProperty("--i", String([0, 1, 3, 4][Math.max(0, i)]));
+    const navView = view === "cat" ? "bud" : view;
+    document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === navView ? "page" : "false"));
+    $("#bnav").style.setProperty("--i", String(NAVPOS[view] ?? 0));
     // il "+" compie l'azione di creazione della pagina in cui ti trovi
     const add = $("#bnav-add");
     if (add) {
-      const label = view === "rules" ? "Nuova ricorrenza" : view === "sim" ? (curScen() ? "Nuova voce dello scenario" : "Nuovo scenario") : "Aggiungi operazione";
+      const label = view === "rules" ? "Nuova ricorrenza" : view === "bud" ? "Nuova busta" : view === "sim" ? (curScen() ? "Nuova voce dello scenario" : "Nuovo scenario") : "Aggiungi operazione";
       add.setAttribute("aria-label", label); add.title = label;
     }
   }
   $("#bnav-add").addEventListener("click", () => {
     if (state.view === "rules") openRule(null, null);
+    else if (state.view === "bud") openBusta(null);
     else if (state.view === "sim") { if (curScen()) openVoce(null); else openScen(null); }
     else openOp(null);
   });
@@ -477,6 +483,8 @@
   }
   $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
   $("#btn-sim").addEventListener("click", () => go("sim"));
+  $("#btn-bud").addEventListener("click", () => go("bud"));
+  $("#bud-back").addEventListener("click", () => go("main"));
   $("#sim-back").addEventListener("click", () => go("main"));
   $("#rules-back").addEventListener("click", () => go("main"));
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
@@ -521,14 +529,42 @@
   });
 
   // ---------- finestra operazione ----------
-  const fConto = $("#f-conto");
+  const fConto = $("#f-conto"), fBusta = $("#f-busta");
   function fillCats(listId) {
     const cats = [...new Set([...BASE_CAT, ...state.ops.map((o) => o.categoria).filter(Boolean), ...state.rules.map((r) => r.categoria).filter(Boolean)])];
     $(listId).innerHTML = cats.map((c) => `<option value="${esc(c)}"></option>`).join("");
   }
+  // Buste di spesa tra cui scegliere: stesso conto, attive nel mese della data (più quella già scelta, se c'è).
+  const bustaChoices = (conto, data, keepId) => {
+    const mese = String(data || "").slice(0, 7);
+    return state.budget.buste.filter((b) => b.tipo === "spesa" && b.conto === conto && (b.id === keepId || (mese.length === 7 && Calc.bustaAttiva(b, mese))));
+  };
+  function refreshBusta() {
+    const conto = fConto.value, uscita = conto === "comune" || $("#f-tipo").value === "uscita", ed = state.editing;
+    const any = state.budget.buste.length > 0, warn = $("#f-busta-warn");
+    $("#f-busta-wrap").hidden = !(uscita && (any || (ed && ed.busta_id)));
+    warn.textContent = ""; warn.classList.remove("warn");
+    if ($("#f-busta-wrap").hidden) { fBusta.value = ""; return; }
+    const list = bustaChoices(conto, $("#f-data").value, ed && ed.busta_id), pick = fBusta.dataset.pick || "";
+    const legacy = !!ed && !ed.busta_id;
+    fBusta.innerHTML = `<option value="">${list.length ? (legacy ? "Senza busta (storico)" : "Scegli la busta…") : "Nessuna busta di spesa per questo conto"}</option>` +
+      list.map((b) => `<option value="${esc(b.id)}">${esc(b.nome)}</option>`).join("");
+    fBusta.value = list.some((b) => b.id === pick) ? pick : "";
+    const imp = parseImporto($("#f-importo").value), mese = $("#f-data").value.slice(0, 7);
+    if (fBusta.value && imp > 0) {
+      const ck = Calc.checkSpesa(state.budget, state.ops, fBusta.value, mese, imp, ed ? ed.id : null);
+      const b = state.budget.buste.find((x) => x.id === fBusta.value);
+      if (ck.over > 0) { warn.textContent = `⚠ Supera il budget di «${b.nome}» di ${eur(ck.over)} (${eur(ck.speso)} su ${eur(ck.budget)}). Dopo averla salvata copri la differenza prendendo budget da un'altra busta.`; warn.classList.add("warn"); }
+      else warn.textContent = `Dopo questa spesa restano ${eur(r2(ck.budget - ck.speso))} nella busta.`;
+    }
+  }
+  fBusta.addEventListener("change", () => { fBusta.dataset.pick = fBusta.value; refreshBusta(); });
+  $("#f-tipo").addEventListener("change", updateOpUi);
+  $("#f-data").addEventListener("change", updateOpUi);
   function updateOpUi() {
     const comune = fConto.value === "comune";
     $("#f-tipo-wrap").hidden = comune;
+    refreshBusta();
     const imp = parseImporto($("#f-importo").value);
     $("#f-preview").textContent = comune && imp > 0
       ? `Verrà tolto ${eur(r2(imp / 2))} da ${cname("c1")} e ${eur(r2(imp - r2(imp / 2)))} da ${cname("c2")}.` : "";
@@ -547,6 +583,7 @@
     const last = state.entries.length ? state.entries[state.entries.length - 1].o.data : cfg.dataInizio;
     $("#f-data").value = op ? op.data : last;
     $("#f-cat").value = op ? op.categoria || "" : "";
+    fBusta.dataset.pick = op && op.busta_id ? op.busta_id : "";
     const generated = !!(op && op.ricorrenza_id);
     $("#op-hint").hidden = !generated;
     $("#op-recur").hidden = generated;
@@ -565,6 +602,12 @@
     if (!(importo > 0)) return { err: "L'importo deve essere maggiore di zero." };
     if (!/^\d{4}-\d\d-\d\d$/.test(data)) return { err: "Scegli una data." };
     const conto = fConto.value, op = state.editing;
+    const uscita = conto === "comune" || $("#f-tipo").value === "uscita";
+    const busta = uscita ? fBusta.value || null : null;
+    // con almeno una busta creata, ogni nuova uscita ne ha una (le vecchie operazioni senza busta possono restare così)
+    if (uscita && state.budget.buste.length > 0 && !busta && !(op && !op.busta_id)) {
+      return { err: bustaChoices(conto, data, null).length ? "Scegli la busta della spesa." : "Per questo conto non c'è ancora una busta di spesa: creala dalla sezione Buste." };
+    }
     const generated = !!(op && op.ricorrenza_id);
     return {
       row: {
@@ -578,6 +621,7 @@
         modificata: op ? (generated ? true : !!op.modificata) : false,
         annullata: op ? !!op.annullata : false,
         updated_at: nowIso(),
+        ...(busta ? { busta_id: busta } : op && op.busta_id ? { busta_id: null } : {}),
       },
     };
   }
@@ -817,7 +861,7 @@
   });
 
   // ---------- modulo regola ----------
-  const rConto = $("#r-conto"), rFreq = $("#r-freq");
+  const rConto = $("#r-conto"), rFreq = $("#r-freq"), rBusta = $("#r-busta");
   function ruleFromForm() {
     const conto = rConto.value;
     const ogni = rFreq.value === "altro" ? Number($("#r-ogni").value) : Number(rFreq.value);
@@ -825,8 +869,20 @@
       conto, voce: $("#r-voce").value.trim(), tipo: conto === "comune" ? "uscita" : $("#r-tipo").value,
       importo: parseImporto($("#r-importo").value), categoria: $("#r-cat").value.trim() || null,
       ogni_mesi: ogni, giorno: Number($("#r-giorno").value), data_inizio: $("#r-inizio").value, data_fine: $("#r-fine").value || null,
+      busta_id: (conto === "comune" || $("#r-tipo").value === "uscita") && !$("#r-busta-wrap").hidden ? rBusta.value || null : null,
     };
   }
+  function refreshRuleBusta() {
+    const conto = rConto.value, uscita = conto === "comune" || $("#r-tipo").value === "uscita", ed = state.editingRule;
+    $("#r-busta-wrap").hidden = !(uscita && (state.budget.buste.length > 0 || (ed && ed.busta_id)));
+    if ($("#r-busta-wrap").hidden) { rBusta.value = ""; return; }
+    const list = bustaChoices(conto, $("#r-inizio").value, ed && ed.busta_id), pick = rBusta.dataset.pick || "";
+    rBusta.innerHTML = `<option value="">${list.length ? (ed && !ed.busta_id ? "Senza busta (storico)" : "Scegli la busta…") : "Nessuna busta di spesa per questo conto"}</option>` +
+      list.map((b) => `<option value="${esc(b.id)}">${esc(b.nome)}</option>`).join("");
+    rBusta.value = list.some((b) => b.id === pick) ? pick : "";
+  }
+  rBusta.addEventListener("change", () => { rBusta.dataset.pick = rBusta.value; });
+  $("#r-tipo").addEventListener("change", updateRuleUi);
   function validateRule(r) {
     if (!r.voce) return "Scrivi una descrizione.";
     if (!(r.importo > 0)) return "L'importo deve essere maggiore di zero.";
@@ -834,10 +890,13 @@
     if (!Number.isInteger(r.giorno) || r.giorno < 1 || r.giorno > 31) return "Il giorno del mese deve essere da 1 a 31.";
     if (!/^\d{4}-\d\d-\d\d$/.test(r.data_inizio)) return "Scegli la data di inizio.";
     if (r.data_fine && r.data_fine < r.data_inizio) return "La data di fine non può precedere l'inizio.";
+    const ed = state.editingRule;
+    if ((r.conto === "comune" || r.tipo === "uscita") && state.budget.buste.length > 0 && !r.busta_id && !(ed && !ed.busta_id)) return "Scegli la busta della spesa.";
     return "";
   }
   function updateRuleUi() {
     $("#r-tipo-wrap").hidden = rConto.value === "comune";
+    refreshRuleBusta();
     $("#r-ogni").hidden = rFreq.value !== "altro";
     const r = ruleFromForm();
     const ok = Number.isInteger(r.ogni_mesi) && r.ogni_mesi >= 1 && r.ogni_mesi <= 24 && Number.isInteger(r.giorno) && r.giorno >= 1 && r.giorno <= 31 && /^\d{4}-\d\d-\d\d$/.test(r.data_inizio);
@@ -863,6 +922,7 @@
     $("#r-tipo").value = src ? src.tipo : "uscita";
     $("#r-importo").value = src ? String(src.importo).replace(".", ",") : "";
     $("#r-cat").value = src ? src.categoria || "" : "";
+    rBusta.dataset.pick = src && src.busta_id ? src.busta_id : "";
     const ogni = rule ? String(rule.ogni_mesi) : "1";
     rFreq.value = QUICK_FREQ.includes(ogni) ? ogni : "altro";
     $("#r-ogni").value = QUICK_FREQ.includes(ogni) ? "" : ogni;
@@ -882,7 +942,7 @@
     if (pending) openOp(pending);
   });
 
-  const SAME = ["voce", "conto", "tipo", "importo", "categoria", "ogni_mesi", "giorno", "data_inizio", "data_fine"];
+  const SAME = ["voce", "conto", "tipo", "importo", "categoria", "ogni_mesi", "giorno", "data_inizio", "data_fine", "busta_id"];
   $("#form-rule").addEventListener("submit", (e) => {
     e.preventDefault();
     const r = ruleFromForm(), err = validateRule(r);
@@ -906,7 +966,7 @@
     const today = localToday(), from = today.slice(0, 7) + "-01";
     const schedule = force || old.ogni_mesi !== nuova.ogni_mesi || old.giorno !== nuova.giorno || old.data_inizio !== nuova.data_inizio ||
       (old.data_fine || null) !== (nuova.data_fine || null);
-    const fields = { voce: nuova.voce, conto: nuova.conto, tipo: nuova.tipo, importo: nuova.importo, categoria: nuova.categoria };
+    const fields = { voce: nuova.voce, conto: nuova.conto, tipo: nuova.tipo, importo: nuova.importo, categoria: nuova.categoria, busta_id: nuova.busta_id ?? null };
     if (!schedule) {
       const { error } = await sb.from("ops").update({ ...fields, updated_at: nowIso() })
         .eq("ricorrenza_id", old.id).gte("data_prevista", from).eq("modificata", false).eq("annullata", false);
@@ -972,6 +1032,253 @@
     $("#dlg-rule").close();
     await reload();
   }
+
+  // ---------- buste e fondi ----------
+  // Le definizioni stanno nella riga `config` id = 'budget' (nessuna tabella nuova). Ogni uscita ha la sua busta (`busta_id`).
+  // Si rilegge la riga prima di scrivere, così due persone non si sovrascrivono a vicenda.
+  async function saveBudget(mutate, okMsg) {
+    try {
+      const r = await sb.from("config").select("dati").eq("id", "budget").maybeSingle();
+      if (r.error) throw r.error;
+      const dati = Calc.normBudget(r.data ? r.data.dati : null);
+      mutate(dati);
+      const w = await sb.from("config").upsert({ id: "budget", dati, updated_at: nowIso() });
+      if (w.error) throw w.error;
+      state.budget = dati;
+    } catch (e) { await handleError(e, "Salvataggio non riuscito. Controlla la connessione e riprova."); return false; }
+    if (okMsg) toast(okMsg);
+    return true;
+  }
+  const budMese = () => state.bud.mese || localToday().slice(0, 7);
+  const shiftMese = (m, n) => Calc.monthEndPlus(`${m}-01`, n).slice(0, 7);
+
+  function renderBud() {
+    const bud = state.budget, mese = budMese(), conto = state.bud.conto, today = localToday(), hide = state.hide;
+    const M = (v) => (hide ? MASK : eur(v));
+    const names = { c1: cname("c1"), c2: cname("c2"), tot: "Insieme" };
+    $("#bud-ctl").innerHTML = `<div class="bud-mese"><button type="button" class="btn sm" data-bact="prev" aria-label="Mese precedente">‹</button><strong>${esc(fmtMese(mese))}</strong><button type="button" class="btn sm" data-bact="next" aria-label="Mese successivo">›</button></div>
+      <div class="seg">${["c1", "c2", "tot"].map((k) => `<button type="button" class="seg-b" data-bact="conto" data-k="${k}" aria-pressed="${k === conto}">${esc(names[k])}</button>`).join("")}</div>`;
+    const body = $("#bud-body");
+    if (!bud.buste.length && !bud.fondi.length) {
+      body.innerHTML = `<div class="card bud-empty"><h3>Pianifica dove vanno i soldi</h3>
+        <p>Una <strong>busta</strong> dice come usi il denaro del mese: di <em>spesa</em> (un budget da spendere) oppure di <em>accumulo</em> (soldi messi da parte per un <strong>fondo</strong>). Quello che non assegni resta nel conto.</p>
+        <div class="actions"><button class="btn primary" type="button" data-bact="busta-new">+ Nuova busta</button><button class="btn" type="button" data-bact="fondo-new">+ Nuovo fondo</button></div></div>`;
+      return;
+    }
+    const plan = Calc.monthPlan(bud, state.ops, mese, conto);
+    const pv = Calc.previsto(bud, state.ops, state.entries, state.cfg, mese, conto, today);
+    const lib = Calc.libero(bud, state.ops, state.entries, state.cfg, conto, today);
+    const neg = plan.daAssegnare < 0, chiuso = mese < today.slice(0, 7);
+    let h = `<div class="card bud-sum"><div class="lbl">Da assegnare · ${esc(fmtMese(mese))}</div>
+      <div class="big${neg && !hide ? " neg" : ""}">${M(plan.daAssegnare)}</div>
+      <div class="line"><span>Entrate <strong>${M(plan.entrate)}</strong></span><span>Assegnato alle buste <strong>${M(plan.assegnato)}</strong></span><span>Uscite senza busta <strong>${eur(plan.senza)}</strong></span></div>
+      <div class="line"><span>${chiuso ? "Saldo a fine mese" : "Previsto a fine mese"} <strong>${M(pv.previsto)}</strong></span><span>Libero fuori dai fondi <strong>${M(lib.libero)}</strong></span></div>
+      ${neg && !hide ? `<p class="bud-warn">Hai assegnato più di quanto entra questo mese: stai usando soldi già presenti sul conto.</p>` : ""}</div>`;
+
+    h += `<div class="sim-h"><h3>Buste</h3><button class="btn sm primary" type="button" data-bact="busta-new">+ Busta</button></div>`;
+    const righe = plan.righe.filter((r) => conto === "tot" || r.busta.conto === conto || r.busta.conto === "comune");
+    h += righe.length ? `<div class="bud-list">${righe.map((r) => budCard(r, mese)).join("")}</div>` : `<p class="empty">Nessuna busta per questo conto in questo mese.</p>`;
+
+    const fondi = bud.fondi.filter((f) => conto === "tot" || f.conto === conto);
+    h += `<div class="sim-h"><h3>Fondi</h3><button class="btn sm" type="button" data-bact="fondo-new">+ Fondo</button></div>`;
+    h += fondi.length ? `<div class="bud-list">${fondi.map((f) => {
+      const s = Calc.fondoSaldo(bud, f, state.ops, today);
+      return `<div class="card fcard"><div class="bc-top"><div class="bc-nm">${esc(f.nome)}<small>${esc(cname(f.conto))}</small></div>
+        <div class="bc-v"><strong>${M(s.saldo)}</strong>${s.inArrivo ? `<small>+${M(s.inArrivo)} a fine mese</small>` : ""}</div></div>
+        <div class="bc-act"><button class="btn sm" type="button" data-bact="fondo-edit" data-id="${esc(f.id)}">Modifica</button></div></div>`;
+    }).join("")}</div>` : `<p class="empty">Nessun fondo per questo conto.</p>`;
+    h += `<div class="actions" style="margin-top:14px"><button class="btn" type="button" data-bact="cat">📊 Spese per categoria</button></div>`;
+    body.innerHTML = h;
+  }
+
+  function budCard(r, mese) {
+    const b = r.busta, bud = state.budget, hide = state.hide;
+    const fondo = b.fondo ? bud.fondi.find((f) => f.id === b.fondo) : null;
+    const meta = [b.tipo === "spesa" ? "Spesa" : "Accumulo", b.conto === "comune" ? "Conto comune · metà" : cname(b.conto)];
+    if (fondo) meta.push(b.tipo === "accumulo" ? `→ ${fondo.nome}` : `paga dal fondo ${fondo.nome}`);
+    const nm = (id) => { const x = bud.buste.find((y) => y.id === id); return x ? x.nome : "busta eliminata"; };
+    const mv = bud.spostamenti.filter((x) => x.mese === mese && (x.a === b.id || x.da === b.id)).map((x) =>
+      `<div class="bc-mv"><span>${hide ? MASK : x.a === b.id ? `+${eur(x.importo)}` : `−${eur(x.importo)}`} ${x.a === b.id ? "da" : "a"} «${esc(nm(x.a === b.id ? x.da : x.a))}»</span>
+        <button type="button" class="btn link sm" data-bact="undo" data-id="${esc(x.id)}">Annulla</button></div>`).join("");
+    const edit = `<div class="bc-act"><button class="btn sm" type="button" data-bact="busta-edit" data-id="${esc(b.id)}">Modifica</button></div>`;
+    const head = (v, sub) => `<div class="bc-top"><div class="bc-nm">${esc(b.nome)}<small>${esc(meta.join(" · "))}</small></div><div class="bc-v"><strong>${v}</strong>${sub ? `<small>${sub}</small>` : ""}</div></div>`;
+    if (b.tipo === "accumulo") {
+      return `<div class="card bcard acc">${head(hide ? MASK : eur(r.budget), "a fine mese nel fondo")}${mv}${edit}</div>`;
+    }
+    const pct = r.budget > 0 ? Math.min(100, (r.speso / r.budget) * 100) : r.speso > 0 ? 100 : 0;
+    const foot = r.stato === "over"
+      ? `<p class="bc-foot over">⚠ Superi il budget di ${eur(r.over)}: prendi budget da un'altra busta. <button type="button" class="btn sm danger" data-bact="copri" data-id="${esc(b.id)}">Copri</button></p>`
+      : `<p class="bc-foot">${r.stato === "warn" ? "Quasi finito · " : ""}restano ${eur(r.residuo)}</p>`;
+    return `<div class="card bcard st-${r.stato}">${head(eur(r.speso), `su ${eur(r.budget)}`)}
+      <div class="bar" role="img" aria-label="${esc(b.nome)}: speso ${eur(r.speso)} su ${eur(r.budget)}"><i style="width:${pct.toFixed(1)}%"></i></div>${foot}${mv}${edit}</div>`;
+  }
+
+  $("#bud-view").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-bact]"); if (!b) return;
+    const a = b.dataset.bact, id = b.dataset.id, bud = state.budget;
+    if (a === "prev") { state.bud.mese = shiftMese(budMese(), -1); renderBud(); }
+    else if (a === "next") { state.bud.mese = shiftMese(budMese(), 1); renderBud(); }
+    else if (a === "conto") { state.bud.conto = b.dataset.k; renderBud(); }
+    else if (a === "busta-new") openBusta(null);
+    else if (a === "busta-edit") openBusta(bud.buste.find((x) => x.id === id));
+    else if (a === "fondo-new") openFondo(null);
+    else if (a === "fondo-edit") openFondo(bud.fondi.find((x) => x.id === id));
+    else if (a === "copri") openCopri(id);
+    else if (a === "undo") {
+      if (state.hide) { hiddenWarn("i budget"); return; }
+      saveBudget((d) => { d.spostamenti = d.spostamenti.filter((x) => x.id !== id); }, "Spostamento annullato.").then((ok) => { if (ok) renderBud(); });
+    } else if (a === "cat") go("cat");
+  });
+
+  // ----- busta -----
+  function buUi(fondoSel) {
+    const old = state.editingBusta, tipo = $("#bu-tipo").value, sel = $("#bu-conto");
+    sel.options[2].disabled = tipo === "accumulo";
+    if (tipo === "accumulo" && sel.value === "comune") sel.value = "c1";
+    const fondi = state.budget.fondi.filter((f) => f.conto === sel.value);
+    const keep = fondoSel !== undefined ? fondoSel : $("#bu-fondo").value;
+    $("#bu-fondo").innerHTML = (tipo === "spesa" ? `<option value="">Nessuno (esce dal conto)</option>` : fondi.length ? "" : `<option value="">Crea prima un fondo per questo conto</option>`) +
+      fondi.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+    $("#bu-fondo").value = fondi.some((f) => f.id === keep) ? keep : tipo === "accumulo" && fondi.length ? fondi[0].id : "";
+    $("#bu-fondo-lbl").textContent = tipo === "accumulo" ? "Fondo che riceve i soldi" : "Paga dal fondo (facoltativo)";
+    $("#bu-tipo").disabled = !!old; sel.disabled = !!old;
+    $("#bu-hint").textContent = (tipo === "accumulo"
+      ? "I soldi restano sul conto ma sono messi da parte: a fine mese vanno nel fondo. Non sono una spesa."
+      : "Soldi che pensi di spendere nel mese. Quello che non spendi resta nel conto.") + (old ? " Tipo e conto non si cambiano dopo la creazione." : "");
+  }
+  function openBusta(b) {
+    if (state.hide) { hiddenWarn("le buste"); return; }
+    state.editingBusta = b || null; state.buDel = false;
+    const sel = $("#bu-conto");
+    sel.options[0].textContent = cname("c1"); sel.options[1].textContent = cname("c2");
+    $("#bu-title").textContent = b ? "Modifica busta" : "Nuova busta";
+    $("#bu-nome").value = b ? b.nome : "";
+    $("#bu-tipo").value = b ? b.tipo : "spesa";
+    sel.value = b ? b.conto : state.bud.conto === "c2" ? "c2" : "c1";
+    $("#bu-importo").value = b ? String(Calc.bustaImporto(b, budMese())).replace(".", ",") : "";
+    $("#bu-fine").value = b && b.fine ? b.fine : "";
+    $("#bu-scope-wrap").hidden = !b; $("#bu-scope").value = "from";
+    $("#bu-del").hidden = !b; $("#bu-del").textContent = "Elimina";
+    $("#bu-msg").textContent = ""; $("#bu-save").disabled = false;
+    buUi(b ? b.fondo || "" : "");
+    $("#dlg-busta").showModal();
+  }
+  $("#bu-tipo").addEventListener("change", () => buUi());
+  $("#bu-conto").addEventListener("change", () => buUi());
+  $("#bu-cancel").addEventListener("click", () => $("#dlg-busta").close());
+  $("#form-busta").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#bu-msg"); msg.textContent = "";
+    const old = state.editingBusta, mese = budMese();
+    const nome = $("#bu-nome").value.trim().slice(0, 60), tipo = old ? old.tipo : $("#bu-tipo").value, conto = old ? old.conto : $("#bu-conto").value;
+    const fondo = $("#bu-fondo").value || null, imp = parseImporto($("#bu-importo").value), fine = $("#bu-fine").value || null;
+    if (!nome) { msg.textContent = "Scrivi un nome."; return; }
+    if (Number.isNaN(imp) || imp < 0) { msg.textContent = "Scrivi il budget del mese (anche 0)."; return; }
+    if (tipo === "accumulo" && !fondo) { msg.textContent = "Scegli il fondo che riceve i soldi (creane uno con «+ Fondo»)."; return; }
+    if (state.budget.buste.some((b) => b.conto === conto && b.nome.toLowerCase() === nome.toLowerCase() && (!old || b.id !== old.id))) { msg.textContent = "Esiste già una busta con questo nome su questo conto."; return; }
+    const first = old ? (old.steps || []).reduce((m, s) => (m === null || s.da < m ? s.da : m), mese) : mese;
+    if (fine && fine < first) { msg.textContent = "L'ultimo mese non può precedere il primo."; return; }
+    $("#bu-save").disabled = true;
+    const ok = await saveBudget((d) => {
+      if (!old) { d.buste.push({ id: crypto.randomUUID(), nome, tipo, conto, fondo, steps: [{ da: mese, importo: r2(imp) }], fine }); return; }
+      const b = d.buste.find((x) => x.id === old.id); if (!b) return;
+      const before = Calc.bustaImporto(b, mese), nextM = shiftMese(mese, 1), atNext = Calc.bustaImporto(b, nextM);
+      b.nome = nome; b.fondo = fondo; b.fine = fine;
+      if (r2(imp) !== before) {
+        if ($("#bu-scope").value === "only") {
+          b.steps = (b.steps || []).filter((s) => s.da !== mese);
+          b.steps.push({ da: mese, importo: r2(imp) });
+          if (!b.steps.some((s) => s.da === nextM)) b.steps.push({ da: nextM, importo: atNext });
+        } else b.steps = (b.steps || []).filter((s) => s.da < mese).concat({ da: mese, importo: r2(imp) });
+      }
+    }, old ? "Busta aggiornata." : "Busta creata.");
+    $("#bu-save").disabled = false;
+    if (ok) { $("#dlg-busta").close(); renderBud(); }
+  });
+  $("#bu-del").addEventListener("click", async () => {
+    const old = state.editingBusta, msg = $("#bu-msg");
+    if (!old) return;
+    if (state.ops.some((o) => o.busta_id === old.id) || state.rules.some((r) => r.busta_id === old.id)) { msg.textContent = "Ha operazioni o ricorrenze collegate: non si può eliminare. Imposta «Ultimo mese» per chiuderla."; return; }
+    if (!state.buDel) { state.buDel = true; $("#bu-del").textContent = "Conferma eliminazione"; return; }
+    const ok = await saveBudget((d) => { d.buste = d.buste.filter((b) => b.id !== old.id); d.spostamenti = d.spostamenti.filter((x) => x.da !== old.id && x.a !== old.id); }, "Busta eliminata.");
+    if (ok) { $("#dlg-busta").close(); renderBud(); }
+  });
+
+  // ----- fondo -----
+  function openFondo(f) {
+    if (state.hide) { hiddenWarn("i fondi"); return; }
+    state.editingFondo = f || null; state.foDel = false;
+    const sel = $("#fo-conto");
+    sel.options[0].textContent = cname("c1"); sel.options[1].textContent = cname("c2");
+    $("#fo-title").textContent = f ? "Modifica fondo" : "Nuovo fondo";
+    $("#fo-nome").value = f ? f.nome : "";
+    sel.value = f ? f.conto : state.bud.conto === "c2" ? "c2" : "c1"; sel.disabled = !!f;
+    $("#fo-iniziale").value = f && Number(f.iniziale) ? String(f.iniziale).replace(".", ",") : "";
+    $("#fo-del").hidden = !f; $("#fo-del").textContent = "Elimina";
+    $("#fo-msg").textContent = ""; $("#fo-save").disabled = false;
+    $("#dlg-fondo").showModal();
+  }
+  $("#fo-cancel").addEventListener("click", () => $("#dlg-fondo").close());
+  $("#form-fondo").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#fo-msg"); msg.textContent = "";
+    const old = state.editingFondo, nome = $("#fo-nome").value.trim().slice(0, 60), conto = old ? old.conto : $("#fo-conto").value;
+    const raw = $("#fo-iniziale").value.trim(), ini = raw === "" ? 0 : parseImporto(raw);
+    if (!nome) { msg.textContent = "Scrivi un nome."; return; }
+    if (Number.isNaN(ini) || ini < 0) { msg.textContent = "L'importo già accumulato deve essere zero o più."; return; }
+    if (state.budget.fondi.some((f) => f.nome.toLowerCase() === nome.toLowerCase() && (!old || f.id !== old.id))) { msg.textContent = "Esiste già un fondo con questo nome."; return; }
+    $("#fo-save").disabled = true;
+    const ok = await saveBudget((d) => {
+      if (!old) d.fondi.push({ id: crypto.randomUUID(), nome, conto, iniziale: r2(ini) });
+      else { const f = d.fondi.find((x) => x.id === old.id); if (f) { f.nome = nome; f.iniziale = r2(ini); } }
+    }, old ? "Fondo aggiornato." : "Fondo creato.");
+    $("#fo-save").disabled = false;
+    if (ok) { $("#dlg-fondo").close(); renderBud(); }
+  });
+  $("#fo-del").addEventListener("click", async () => {
+    const old = state.editingFondo, msg = $("#fo-msg");
+    if (!old) return;
+    if (state.budget.buste.some((b) => b.fondo === old.id)) { msg.textContent = "Ci sono buste collegate a questo fondo: cambiale o eliminale prima."; return; }
+    if (!state.foDel) { state.foDel = true; $("#fo-del").textContent = "Conferma eliminazione"; return; }
+    const ok = await saveBudget((d) => { d.fondi = d.fondi.filter((f) => f.id !== old.id); }, "Fondo eliminato.");
+    if (ok) { $("#dlg-fondo").close(); renderBud(); }
+  });
+
+  // ----- copri una busta con il budget di un'altra -----
+  function openCopri(id) {
+    if (state.hide) { hiddenWarn("i budget"); return; }
+    const bud = state.budget, mese = budMese(), dest = bud.buste.find((b) => b.id === id);
+    if (!dest) return;
+    const st = Calc.statoBusta(bud, state.ops, dest, mese);
+    const fonti = bud.buste.filter((b) => b.id !== dest.id && b.conto === dest.conto && (Calc.bustaAttiva(b, mese) || Calc.bustaBudget(bud, b, mese) > 0))
+      .map((b) => ({ b, lib: Calc.statoBusta(bud, state.ops, b, mese).libero })).filter((x) => x.lib > 0);
+    state.copri = { dest, mese, fonti };
+    $("#cv-info").textContent = `«${dest.nome}» supera il budget di ${eur(st.over)} in ${fmtMese(mese)}. Prendi la differenza dal budget di un'altra busta dello stesso conto.`;
+    $("#cv-da").innerHTML = fonti.length ? fonti.map((x) => `<option value="${esc(x.b.id)}">${esc(x.b.nome)} · disponibili ${eur(x.lib)}</option>`).join("") : `<option value="">Nessuna busta ha budget da cedere</option>`;
+    $("#cv-importo").value = fonti.length ? String(Math.min(st.over, fonti[0].lib)).replace(".", ",") : "";
+    $("#cv-msg").textContent = fonti.length ? "" : "Nessun'altra busta di questo conto ha budget disponibile in questo mese.";
+    $("#cv-save").disabled = !fonti.length;
+    $("#dlg-copri").showModal();
+  }
+  $("#cv-da").addEventListener("change", () => {
+    const c = state.copri; if (!c) return;
+    const x = c.fonti.find((y) => y.b.id === $("#cv-da").value);
+    if (x) $("#cv-importo").value = String(Math.min(Calc.statoBusta(state.budget, state.ops, c.dest, c.mese).over, x.lib)).replace(".", ",");
+  });
+  $("#cv-cancel").addEventListener("click", () => $("#dlg-copri").close());
+  $("#form-copri").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const c = state.copri, msg = $("#cv-msg"); msg.textContent = "";
+    if (!c) return;
+    const da = c.fonti.find((x) => x.b.id === $("#cv-da").value), imp = parseImporto($("#cv-importo").value);
+    if (!da) { msg.textContent = "Scegli la busta da cui prendere il budget."; return; }
+    if (!(imp > 0)) { msg.textContent = "Scrivi un importo maggiore di zero."; return; }
+    if (imp > da.lib + 0.004) { msg.textContent = `Da «${da.b.nome}» puoi prendere al massimo ${eur(da.lib)}.`; return; }
+    $("#cv-save").disabled = true;
+    const ok = await saveBudget((d) => { d.spostamenti.push({ id: crypto.randomUUID(), mese: c.mese, da: da.b.id, a: c.dest.id, importo: r2(imp) }); }, "Budget spostato.");
+    $("#cv-save").disabled = false;
+    if (ok) { $("#dlg-copri").close(); renderBud(); }
+  });
 
   // ---------- simulazione ----------
   // Gli scenari stanno nella tabella `config` (riga id = 'scenari'): nessuna tabella nuova.
