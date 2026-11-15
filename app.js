@@ -476,6 +476,36 @@
     return !reduce && typeof requestAnimationFrame === "function";
   }
   $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
+
+  // ---------- tema chiaro / scuro ----------
+  // Swipe verso l'alto sulla barra in basso: passa da chiaro a scuro e viceversa. La scelta si ricorda; finché non
+  // la fai, l'app segue il tema del telefono.
+  const THEME_KEY = "conti-theme";
+  const systemDark = () => !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const currentTheme = () => document.documentElement.dataset.theme || (systemDark() ? "dark" : "light");
+  { const saved = lsGet(THEME_KEY); if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved; }
+  function toggleTheme() {
+    const next = currentTheme() === "dark" ? "light" : "dark", root = document.documentElement;
+    if (animOk()) { root.classList.add("theme-anim"); setTimeout(() => root.classList.remove("theme-anim"), 450); }
+    root.dataset.theme = next; lsSet(THEME_KEY, next);
+    toast(next === "dark" ? "Tema scuro" : "Tema chiaro");
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch { /* ignora */ } }
+  }
+  {
+    const nav = $("#bnav");
+    let start = null, swiped = false;
+    nav.addEventListener("pointerdown", (e) => { start = { x: e.clientX, y: e.clientY }; swiped = false; });
+    nav.addEventListener("pointermove", (e) => {
+      if (!start || swiped) return;
+      const dy = e.clientY - start.y, dx = e.clientX - start.x;
+      if (dy <= -40 && Math.abs(dx) < Math.abs(dy)) { swiped = true; toggleTheme(); }
+    });
+    const end = () => { start = null; };
+    nav.addEventListener("pointerup", end);
+    nav.addEventListener("pointercancel", end);
+    // dopo uno swipe il tocco non deve aprire la sezione sotto il dito
+    nav.addEventListener("click", (e) => { if (swiped) { e.stopImmediatePropagation(); e.preventDefault(); swiped = false; } }, true);
+  }
   $("#btn-sim").addEventListener("click", () => go("sim"));
   $("#sim-back").addEventListener("click", () => go("main"));
   $("#rules-back").addEventListener("click", () => go("main"));
