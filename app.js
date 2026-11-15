@@ -448,6 +448,7 @@
     const navView = view === "cat" ? "bud" : view;
     document.querySelectorAll("#bnav button").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === navView ? "page" : "false"));
     $("#bnav").style.setProperty("--i", String(NAVPOS[view] ?? 0));
+    document.querySelectorAll("[data-vs]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.vs === view)));
     // il "+" compie l'azione di creazione della pagina in cui ti trovi
     const add = $("#bnav-add");
     if (add) {
@@ -482,6 +483,8 @@
     return !reduce && typeof requestAnimationFrame === "function";
   }
   $("#bnav").addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b) go(b.dataset.nav); });
+  // selettore «Buste | Categorie» in cima alle due sezioni
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-vs]"); if (b) go(b.dataset.vs); });
   $("#btn-sim").addEventListener("click", () => go("sim"));
   $("#btn-bud").addEventListener("click", () => go("bud"));
   $("#bud-back").addEventListener("click", () => go("main"));

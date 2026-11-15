@@ -597,3 +597,6 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
 .bcard.acc { border-style: dashed; }
 @media (min-width: 900px) { .bud-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .bcard .bar > i { transition: none; } }
+
+.vseg { margin: 0 0 12px; }
+.vseg .seg-b { min-width: 96px; }
