@@ -218,6 +218,140 @@
     return out;
   }
 
+  // ---------- Buste e fondi ----------
+  // Dati (riga `config` id = 'budget'):
+  //   fondi: [{ id, nome, conto: "c1"|"c2", iniziale, obiettivo }]
+  //   buste: [{ id, nome, tipo: "spesa"|"accumulo", conto: "c1"|"c2"|"comune", fondo, steps: [{ da: "AAAA-MM", importo }], fine }]
+  //   spostamenti: [{ id, mese, da: bustaId, a: bustaId, importo }]   (copertura di una busta con il budget di un'altra)
+  // `fondo`: per un accumulo è il fondo che riceve i soldi; per una spesa (facoltativo) è il fondo da cui si pagano.
+  // Ogni uscita appartiene a una busta tramite `busta_id`. Non c'è riporto tra mesi: ogni mese riparte dal suo budget.
+  const monthOf = (d) => String(d).slice(0, 7);
+  const addMonth = (m, n) => monthEndPlus(`${m}-01`, n).slice(0, 7);
+  const lastDay = (m) => monthEndPlus(`${m}-01`, 0);
+  const emptyBudget = () => ({ fondi: [], buste: [], spostamenti: [] });
+  const normBudget = (d) => ({
+    fondi: Array.isArray(d && d.fondi) ? d.fondi : [],
+    buste: Array.isArray(d && d.buste) ? d.buste : [],
+    spostamenti: Array.isArray(d && d.spostamenti) ? d.spostamenti : [],
+  });
+  // quota di un importo di una busta (o di un'operazione) che pesa sul conto k ("tot" = tutto)
+  function share(imp, bustaConto, k) {
+    if (k === "tot") return r2(imp);
+    if (bustaConto === "comune") { const a = r2(imp / 2); return k === "c1" ? a : r2(imp - a); }
+    return bustaConto === k ? r2(imp) : 0;
+  }
+
+  // Importo base della busta nel mese: l'ultimo "da questo mese in poi" che vale, 0 dopo la fine.
+  function bustaImporto(b, mese) {
+    if (b.fine && mese > b.fine) return 0;
+    let imp = 0, da = "";
+    for (const s of b.steps || []) if (s.da <= mese && s.da >= da) { imp = Number(s.importo) || 0; da = s.da; }
+    return imp;
+  }
+  // La busta si può scegliere per una spesa di questo mese: è iniziata e non è finita.
+  function bustaAttiva(b, mese) {
+    if (b.fine && mese > b.fine) return false;
+    return (b.steps || []).some((s) => s.da <= mese);
+  }
+  // Budget del mese dopo le coperture (il totale tra le buste non cambia).
+  function bustaBudget(bud, b, mese) {
+    let v = bustaImporto(b, mese);
+    for (const x of bud.spostamenti) {
+      if (x.mese !== mese) continue;
+      if (x.a === b.id) v += Number(x.importo);
+      if (x.da === b.id) v -= Number(x.importo);
+    }
+    return r2(v);
+  }
+  const isUscita = (o) => o.conto === "comune" || o.tipo === "uscita";
+  // Speso nella busta nel mese (importo intero dell'operazione, annullate escluse).
+  function bustaSpeso(ops, b, mese) {
+    let s = 0;
+    for (const o of ops) if (!o.annullata && o.busta_id === b.id && isUscita(o) && monthOf(o.data) === mese) s = r2(s + Number(o.importo));
+    return s;
+  }
+  // Stato di una busta di spesa: ok / warn (dal 90%) / over (oltre il budget).
+  function statoBusta(bud, ops, b, mese) {
+    const budget = bustaBudget(bud, b, mese), speso = b.tipo === "spesa" ? bustaSpeso(ops, b, mese) : 0;
+    const over = r2(Math.max(0, speso - budget)), residuo = r2(Math.max(0, budget - speso));
+    const stato = over > 0 ? "over" : budget > 0 && speso >= budget * 0.9 ? "warn" : "ok";
+    return { budget, speso, residuo, over, effettivo: r2(Math.max(budget, speso)), stato, libero: r2(budget - speso) };
+  }
+  // Questa spesa (nuova, o la modifica di editId) manderebbe la busta oltre il budget?
+  function checkSpesa(bud, ops, bustaId, mese, importo, editId) {
+    const b = bud.buste.find((x) => x.id === bustaId);
+    if (!b || b.tipo !== "spesa") return { over: 0, budget: 0, speso: 0 };
+    const rest = ops.filter((o) => o.id !== editId);
+    const budget = bustaBudget(bud, b, mese), speso = r2(bustaSpeso(rest, b, mese) + Number(importo));
+    return { budget, speso, over: r2(Math.max(0, speso - budget)) };
+  }
+
+  // Pianificazione di un mese per un conto ("c1" | "c2" | "tot").
+  // Da assegnare = entrate del mese - buste (spesa al massimo tra budget e speso, accumulo) - uscite senza busta.
+  function monthPlan(bud, ops, mese, conto) {
+    const eff = (o) => { const p = parts(o); return conto === "tot" ? p.c1 + p.c2 : p[conto]; };
+    const byId = new Map(bud.buste.map((b) => [b.id, b]));
+    let entrate = 0, senza = 0;
+    for (const o of ops) {
+      if (o.annullata || monthOf(o.data) !== mese) continue;
+      const v = r2(eff(o));
+      if (v > 0) entrate = r2(entrate + v);
+      else if (v < 0 && !byId.has(o.busta_id)) senza = r2(senza - v);
+    }
+    const righe = [];
+    for (const b of bud.buste) {
+      const st = statoBusta(bud, ops, b, mese);
+      if (!bustaAttiva(b, mese) && st.budget === 0 && st.speso === 0) continue;
+      const peso = b.tipo === "spesa" ? st.effettivo : st.budget;
+      righe.push({ busta: b, ...st, quota: share(peso, b.conto, conto), quotaResiduo: b.tipo === "spesa" ? share(st.residuo, b.conto, conto) : 0 });
+    }
+    const assegnato = r2(righe.reduce((s, r) => s + r.quota, 0));
+    const residuo = r2(righe.reduce((s, r) => s + r.quotaResiduo, 0));
+    return { mese, conto, entrate, senza, righe, assegnato, residuo, daAssegnare: r2(entrate - assegnato - senza) };
+  }
+
+  // Saldo previsto a fine mese: saldo dopo tutte le operazioni del mese, meno quanto resta da spendere nelle buste
+  // di spesa (equivale a "saldo a inizio mese + entrate - budget interi", senza contare due volte il già speso).
+  // I mesi già chiusi non hanno residui. Le buste di accumulo non sono uscite: i soldi restano nel conto.
+  function previsto(bud, ops, entries, cfg, mese, conto, today) {
+    const pk = (b) => (conto === "tot" ? r2(b.c1 + b.c2) : b[conto]);
+    const finale = pk(balanceAt(entries, cfg, lastDay(mese)));
+    const inizio = pk(balanceAt(entries, cfg, lastDay(addMonth(mese, -1))));
+    const plan = monthPlan(bud, ops, mese, conto);
+    const residuo = mese >= monthOf(today) ? plan.residuo : 0;
+    return { inizio, finale, residuo, previsto: r2(finale - residuo), plan };
+  }
+
+  // Saldo di un fondo: iniziale + accumuli dei mesi chiusi - spese pagate dal fondo (fino a oggi).
+  // `inArrivo` è l'accumulo del mese in corso, già messo da parte ma non ancora versato.
+  function fondoSaldo(bud, fondo, ops, today) {
+    const cur = monthOf(today);
+    let versato = 0, inArrivo = 0;
+    for (const b of bud.buste) {
+      if (b.tipo !== "accumulo" || b.fondo !== fondo.id) continue;
+      const first = (b.steps || []).reduce((m, s) => (m === null || s.da < m ? s.da : m), null);
+      if (first === null) continue;
+      for (let m = first, n = 0; m < cur && n < 240; m = addMonth(m, 1), n++) versato = r2(versato + bustaBudget(bud, b, m));
+      if (bustaAttiva(b, cur)) inArrivo = r2(inArrivo + bustaBudget(bud, b, cur));
+    }
+    let prelevato = 0;
+    const fromFondo = new Set(bud.buste.filter((b) => b.tipo === "spesa" && b.fondo === fondo.id).map((b) => b.id));
+    for (const o of ops) if (!o.annullata && fromFondo.has(o.busta_id) && isUscita(o) && o.data <= today) prelevato = r2(prelevato + Number(o.importo));
+    return { saldo: r2(Number(fondo.iniziale || 0) + versato - prelevato), versato, prelevato, inArrivo };
+  }
+  // Soldi del conto non vincolati: saldo di oggi - fondi - accumulo del mese già messo da parte.
+  function libero(bud, ops, entries, cfg, conto, today) {
+    const now = balanceAt(entries, cfg, today);
+    const reale = conto === "tot" ? r2(now.c1 + now.c2) : now[conto];
+    let vincolato = 0;
+    for (const f of bud.fondi) {
+      if (conto !== "tot" && f.conto !== conto) continue;
+      const s = fondoSaldo(bud, f, ops, today);
+      vincolato = r2(vincolato + s.saldo + s.inArrivo);
+    }
+    return { reale, vincolato, libero: r2(reale - vincolato) };
+  }
+
   // ---------- Riconciliazione col saldo della banca ----------
   // Confronta il saldo che la banca mostra (banca) con quello calcolato dall'app alla data indicata.
   // diff > 0: alla banca c'è di più (manca un'entrata o c'è un'uscita in più); diff < 0: il contrario.
@@ -297,7 +431,7 @@
     return { ticks, min: a, max: b, step };
   }
 
-  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, monthImpact, reconcile, verifyStatus, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
+  const api = { r2, parts, cmp, compute, parseImporto, monthEndPlus, occurrences, horizon, generationDates, nextDates, ruleRow, freqText, expandVoce, balanceAt, simulate, monthImpact, reconcile, verifyStatus, emptyBudget, normBudget, share, bustaImporto, bustaAttiva, bustaBudget, bustaSpeso, statoBusta, checkSpesa, monthPlan, previsto, fondoSaldo, libero, categorySummary, dayNum, monthlySeries, sparkGeometry, niceTicks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Calc = api;
 })(typeof window !== "undefined" ? window : globalThis);
