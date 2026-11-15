@@ -597,12 +597,14 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
 @media (min-width: 900px) { .bud-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .bcard .bar > i { transition: none; } }
 
-
-/* ----- Operazioni | Riepilogo (sotto i 1100px; sopra il riepilogo è il pannello laterale) ----- */
-.vm-seg { display: none; }
+/* ----- Categorie dentro la sezione Conti -----
+   Sopra i 1100px è il pannello laterale; sotto è un riquadro fisso tra il riepilogo mensile e l'elenco. */
 @media (max-width: 1099px) {
-  .vm-seg { display: inline-flex; margin: 0 0 12px; }
-  .vm-seg .seg-b { min-width: 110px; }
-  .main-grid[data-vm="sum"] .main-col > :not(#tabs):not(.vm-seg) { display: none; }
-  .main-grid[data-vm="sum"] .side { display: block; margin-bottom: 16px; }
+  .main-grid { display: flex; flex-direction: column; }
+  .main-col { display: contents; }
+  .main-grid #tabs { order: 0; }
+  .main-grid #monthly { order: 1; }
+  .main-grid .side { display: block; order: 2; margin-bottom: 16px; }
+  .main-grid .actions { order: 3; }
+  .main-grid #list { order: 4; }
 }

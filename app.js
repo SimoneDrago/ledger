@@ -33,7 +33,7 @@
   const QUICK_FREQ = ["1", "2", "3", "6", "12"];
 
   const state = {
-    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, hide: false, mainVm: "ops", riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
+    cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, hide: false, riconc: { c1: [], c2: [] }, budget: Calc.emptyBudget(), bud: { mese: null, conto: "c1" }, editingBusta: null, editingFondo: null, copri: null, buDel: false, foDel: false, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
     open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
@@ -220,8 +220,6 @@
     $("#rules-view").hidden = state.view !== "rules";
     $("#sim-view").hidden = state.view !== "sim";
     $("#bud-view").hidden = state.view !== "bud";
-    document.querySelector(".main-grid").dataset.vm = state.mainVm;
-    document.querySelectorAll("[data-vm]").forEach((b) => { if (b.matches("button")) b.setAttribute("aria-pressed", String(b.dataset.vm === state.mainVm)); });
     if (state.view === "bud") { renderBud(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
@@ -484,7 +482,6 @@
   $("#btn-sim").addEventListener("click", () => go("sim"));
   $("#btn-bud").addEventListener("click", () => go("bud"));
   $("#bud-back").addEventListener("click", () => go("main"));
-  $(".vm-seg").addEventListener("click", (e) => { const b = e.target.closest("[data-vm]"); if (!b) return; state.mainVm = b.dataset.vm; render(); });
   $("#sim-back").addEventListener("click", () => go("main"));
   $("#rules-back").addEventListener("click", () => go("main"));
   $("#chk-ann").addEventListener("change", (e) => { state.showAnn = e.target.checked; renderList(); });
