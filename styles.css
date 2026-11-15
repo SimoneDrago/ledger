@@ -603,8 +603,19 @@ tr.goal-row td { box-shadow: inset 0 -2px 0 var(--accent); }
   .main-grid { display: flex; flex-direction: column; }
   .main-col { display: contents; }
   .main-grid #tabs { order: 0; }
-  .main-grid #monthly { order: 1; }
-  .main-grid .side { display: block; order: 2; margin-bottom: 16px; }
-  .main-grid .actions { order: 3; }
-  .main-grid #list { order: 4; }
+  .main-grid #fondi { order: 1; }
+  .main-grid #monthly { order: 2; }
+  .main-grid .side { display: block; order: 3; margin-bottom: 16px; }
+  .main-grid .actions { order: 4; }
+  .main-grid #list { order: 5; }
 }
+
+/* ----- fondi nella sezione Conti ----- */
+.fondi-box { padding: 14px 16px; margin-bottom: 14px; }
+.fx-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.fx-h h3 { margin: 0; font-size: 1.05rem; font-weight: 800; letter-spacing: -.01em; }
+.fx-h span { color: var(--muted); font-size: .84rem; font-weight: 600; }
+.fx-h strong { color: var(--text); }
+.fx-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 9px 0; }
+.fx-row + .fx-row { border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+#monthly td small.prev { display: block; color: var(--muted); font-size: .68rem; font-weight: 600; white-space: nowrap; }

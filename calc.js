@@ -311,16 +311,20 @@
     return { mese, conto, entrate, senza, righe, assegnato, residuo, daAssegnare: r2(entrate - assegnato - senza) };
   }
 
-  // Saldo previsto a fine mese: saldo dopo tutte le operazioni del mese, meno quanto resta da spendere nelle buste
-  // di spesa (equivale a "saldo a inizio mese + entrate - budget interi", senza contare due volte il già speso).
-  // I mesi già chiusi non hanno residui. Le buste di accumulo non sono uscite: i soldi restano nel conto.
+  // Saldo previsto a fine mese: saldo dopo tutte le operazioni fino a fine mese, meno quanto resta da spendere nelle buste
+  // di spesa dal mese corrente fino a quel mese (equivale a "saldo a inizio mese + entrate - budget interi", senza contare
+  // due volte il già speso). I mesi già chiusi non hanno residui: quello che non è stato speso è rimasto nel conto. Le buste di accumulo non sono uscite: i soldi restano nel conto.
   function previsto(bud, ops, entries, cfg, mese, conto, today) {
     const pk = (b) => (conto === "tot" ? r2(b.c1 + b.c2) : b[conto]);
     const finale = pk(balanceAt(entries, cfg, lastDay(mese)));
     const inizio = pk(balanceAt(entries, cfg, lastDay(addMonth(mese, -1))));
     const plan = monthPlan(bud, ops, mese, conto);
-    const residuo = mese >= monthOf(today) ? plan.residuo : 0;
-    return { inizio, finale, residuo, previsto: r2(finale - residuo), plan };
+    // quello che resta da spendere nei mesi dal corrente fino a questo riduce anche i saldi dei mesi dopo
+    let residuo = 0;
+    if (mese >= monthOf(today)) {
+      for (let m = monthOf(today), n = 0; m <= mese && n < 240; m = addMonth(m, 1), n++) residuo = r2(residuo + (m === mese ? plan.residuo : monthPlan(bud, ops, m, conto).residuo));
+    }
+    return { inizio, finale, residuo, residuoMese: mese >= monthOf(today) ? plan.residuo : 0, previsto: r2(finale - residuo), plan };
   }
 
   // Saldo di un fondo: iniziale + accumuli dei mesi chiusi - spese pagate dal fondo (fino a oggi).

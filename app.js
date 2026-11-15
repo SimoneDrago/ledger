@@ -223,7 +223,24 @@
     if (state.view === "bud") { renderBud(); return; }
     if (state.view === "rules") { renderRules(); return; }
     if (state.view === "sim") { renderSim(); return; }
-    renderCards(); renderMonthly(); renderList(); renderCatPanel();
+    renderCards(); renderFondi(); renderMonthly(); renderList(); renderCatPanel();
+  }
+
+  // Saldo a fine mese di un conto. Per i mesi chiusi è quello reale; dal mese in corso in poi è la previsione, che toglie
+  // quanto resta da spendere nelle buste di spesa (senza buste coincide con il saldo dopo l'ultima operazione).
+  function saldoFine(k, mese) {
+    const today = localToday();
+    if (mese < today.slice(0, 7) || !state.budget.buste.length) return Calc.balanceAt(state.entries, state.cfg, Calc.monthEndPlus(`${mese}-01`, 0))[k];
+    return Calc.previsto(state.budget, state.ops, state.entries, state.cfg, mese, k, today).previsto;
+  }
+  // Con le buste ogni mese, da oggi fino all'ultimo con operazioni, ha un saldo previsto anche se non ha ancora operazioni.
+  function withBudgetMonths(months) {
+    if (!state.budget.buste.length || !months.size) return months;
+    const tm = localToday().slice(0, 7), last = [...months.keys()].pop();
+    if (last < tm) return months;
+    const out = new Map(months);
+    for (let m = tm, n = 0; m <= last && n < 240; m = Calc.monthEndPlus(`${m}-01`, 1).slice(0, 7), n++) if (!out.has(m)) out.set(m, []);
+    return new Map([...out].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
   }
 
   function renderCards() {
@@ -232,7 +249,8 @@
     const now = Calc.balanceAt(state.entries, state.cfg, today);
     const lastDate = state.entries.length ? state.entries[state.entries.length - 1].o.data : null;
     const future = lastDate && lastDate > today;
-    const proj = (k) => (future ? `fine ${fmtMese(lastDate.slice(0, 7))}: ${mEur(state.cur[k])}` : "");
+    const projMese = future ? lastDate.slice(0, 7) : state.budget.buste.length ? today.slice(0, 7) : null;
+    const proj = (k) => (projMese ? `fine ${fmtMese(projMese)}: ${mEur(saldoFine(k, projMese))}` : "");
     const comuni = state.entries.filter((e) => e.o.conto === "comune");
     const tot = comuni.reduce((s, e) => s + e.o.importo, 0);
     const totOggi = comuni.filter((e) => e.o.data <= today).reduce((s, e) => s + e.o.importo, 0);
@@ -301,6 +319,24 @@
     return m;
   }
 
+  // Fondi del conto aperto: quanto hanno accumulato, da quali buste arrivano, e quanto resta libero.
+  function renderFondi() {
+    const el = $("#fondi"), tab = state.tab, bud = state.budget;
+    const fondi = tab === "comune" ? [] : bud.fondi.filter((f) => f.conto === tab);
+    if (!fondi.length) { el.innerHTML = ""; return; }
+    const today = localToday(), tm = today.slice(0, 7), M = (v) => (state.hide ? MASK : eur(v));
+    const lib = Calc.libero(bud, state.ops, state.entries, state.cfg, tab, today);
+    const rows = fondi.map((f) => {
+      const s = Calc.fondoSaldo(bud, f, state.ops, today);
+      const da = bud.buste.filter((b) => b.tipo === "accumulo" && b.fondo === f.id && Calc.bustaAttiva(b, tm))
+        .map((b) => `${esc(b.nome)} · ${M(Calc.bustaBudget(bud, b, tm))} al mese`).join(" · ");
+      return `<div class="fx-row"><div class="bc-nm">${esc(f.nome)}<small>${da ? `Alimentato da ${da}` : "Nessuna busta lo alimenta"}</small></div>
+        <div class="bc-v"><strong>${M(s.saldo)}</strong>${s.inArrivo ? `<small>+${M(s.inArrivo)} a fine mese</small>` : ""}</div></div>`;
+    }).join("");
+    el.innerHTML = `<div class="card fondi-box"><div class="fx-h"><h3>Fondi · ${esc(cname(tab))}</h3><span>Libero <strong>${M(lib.libero)}</strong></span></div>${rows}
+      <p class="note" style="margin:6px 0 0">I fondi sono una parte del conto messa da parte: i soldi sono sul conto, ma non sono liberi.</p></div>`;
+  }
+
   function renderMonthly() {
     const tab = state.tab;
     let h;
@@ -316,14 +352,18 @@
         <table><thead><tr><th>Mese</th><th>Uscite comuni</th><th>${esc(cname("c1"))}</th><th>${esc(cname("c2"))}</th></tr></thead>
         <tbody>${rows}<tr class="tot"><td>Totale</td><td>${eur(t)}</td><td>${eur(a)}</td><td>${eur(b)}</td></tr></tbody></table>`;
     } else {
-      const months = groupByMonth(state.entries.filter((e) => e.o.conto === tab || e.o.conto === "comune"));
+      const months = withBudgetMonths(groupByMonth(state.entries.filter((e) => e.o.conto === tab || e.o.conto === "comune")));
+      const today = localToday(), tm = today.slice(0, 7), hasBud = state.budget.buste.length > 0;
+      const now = hasBud ? Calc.balanceAt(state.entries, state.cfg, today)[tab] : 0;
       const rows = [...months].map(([k, es]) => {
         let ent = 0, usc = 0, com = 0;
         for (const e of es) {
           const v = e.p[tab];
           if (e.o.conto === "comune") com += -v; else if (v > 0) ent += v; else usc += -v;
         }
-        return `<tr><td>${fmtMese(k)}</td><td>${mEur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${mEur(es[es.length - 1].b[tab])}</strong></td></tr>`;
+        // con le buste, dal mese in corso il saldo è previsto; nel mese in corso si vede anche quello di oggi
+        const sub = hasBud && k >= tm ? `<small class="prev">${k === tm ? `previsto · oggi ${mEur(now)}` : "previsto"}</small>` : "";
+        return `<tr><td>${fmtMese(k)}</td><td>${mEur(ent)}</td><td>${eur(usc)}</td><td>${eur(com)}</td><td><strong>${mEur(saldoFine(tab, k))}</strong>${sub}</td></tr>`;
       }).join("");
       h = `<table><thead><tr><th>Mese</th><th>Entrate</th><th>Uscite</th><th>Conto comune</th><th>Saldo fine mese</th></tr></thead>
         <tbody><tr><td>Partenza</td><td colspan="3"></td><td><strong>${mEur(state.cfg[tab].iniziale)}</strong></td></tr>${rows}</tbody></table>`;
@@ -372,7 +412,7 @@
     const filter = (e) => (tab === "comune" ? e.o.conto === "comune" : e.o.conto === tab || e.o.conto === "comune");
     let arr = state.entries.filter(filter);
     if (state.showAnn) arr = arr.concat(state.annEntries.filter(filter)).sort((a, b) => Calc.cmp(a.o, b.o));
-    const months = groupByMonth(arr);
+    const months = tab === "comune" ? groupByMonth(arr) : withBudgetMonths(groupByMonth(arr));
     let h = tab === "comune" ? "" : `<div class="month"><div class="mhead"><span>Saldo di partenza · ${fmtData(state.cfg.dataInizio)}</span><span>${mEur(state.cfg[tab].iniziale)}</span></div></div>`;
     if (!months.size) h += `<p class="empty">Nessuna operazione.</p>`;
     else h += `<div class="mbar"><button type="button" class="btn sm" data-mall="open">Espandi tutto</button><button type="button" class="btn sm" data-mall="close">Comprimi tutto</button></div>`;
@@ -389,9 +429,10 @@
         else if (e.p[tab] > 0) ent += e.p[tab]; else usc += -e.p[tab];
       }
       const tot = tab === "comune" ? `uscite ${eur(usc)}` : `entrate ${mEur(ent)} · uscite ${eur(usc)}`;
-      const foot = tab === "comune" || !last ? "" : `<div class="mfoot">Saldo fine mese: <strong>${mEur(last.b[tab])}</strong></div>`;
+      const sf = tab === "comune" ? null : saldoFine(tab, k), prev = state.budget.buste.length > 0 && k >= tm;
+      const foot = sf === null ? "" : `<div class="mfoot">Saldo fine mese${prev ? " previsto" : ""}: <strong>${mEur(sf)}</strong></div>`;
       const open = isOpen(k);
-      const saldo = tab === "comune" || !last ? "" : ` · saldo ${mEur(last.b[tab])}`;
+      const saldo = sf === null ? "" : ` · saldo ${mEur(sf)}`;
       h += `<div class="month"><button type="button" class="mhead" data-month="${k}" aria-expanded="${open}">
           <span><span class="chev" aria-hidden="true">${open ? "▾" : "▸"}</span> ${fmtMese(k)}</span><span class="tot">${tot}${open ? "" : saldo}</span></button>
         ${open ? `<ul class="rows">${es.map((e) => rowHtml(e, tab)).join("")}</ul>${foot}` : ""}</div>`;
@@ -1069,7 +1110,7 @@
     let h = `<div class="card bud-sum"><div class="lbl">Da assegnare · ${esc(fmtMese(mese))}</div>
       <div class="big${neg && !hide ? " neg" : ""}">${M(plan.daAssegnare)}</div>
       <div class="line"><span>Entrate <strong>${M(plan.entrate)}</strong></span><span>Assegnato alle buste <strong>${M(plan.assegnato)}</strong></span><span>Uscite senza busta <strong>${eur(plan.senza)}</strong></span></div>
-      <div class="line"><span>${chiuso ? "Saldo a fine mese" : "Previsto a fine mese"} <strong>${M(pv.previsto)}</strong></span><span>Libero fuori dai fondi <strong>${M(lib.libero)}</strong></span></div>
+      <div class="line"><span>${chiuso ? "Saldo a fine mese" : "Saldo a fine mese previsto"} <strong>${M(pv.previsto)}</strong></span><span>Libero fuori dai fondi <strong>${M(lib.libero)}</strong></span></div>
       ${neg && !hide ? `<p class="bud-warn">Hai assegnato più di quanto entra questo mese: stai usando soldi già presenti sul conto.</p>` : ""}</div>`;
 
     h += `<div class="sim-h"><h3>Buste</h3><button class="btn sm primary" type="button" data-bact="busta-new">+ Busta</button></div>`;

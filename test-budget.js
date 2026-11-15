@@ -54,7 +54,13 @@ const nessuna = C.previsto(C.emptyBudget(), ops0, e0, cfg, "2026-11", "c1", toda
 assert.deepStrictEqual([nessuna.residuo, nessuna.previsto], [0, 4100]);
 // mesi futuri: budget intero; mesi chiusi: nessun residuo
 const bud2 = C.normBudget({ ...bud, buste: [{ ...bud.buste[0], steps: [{ da: "2026-10", importo: 500 }] }, bud.buste[1]] });
-assert.strictEqual(C.previsto(bud2, ops0, e0, cfg, "2026-12", "c1", today).residuo, 500);
+// il residuo si accumula: quello che resta da spendere a novembre (300) riduce anche dicembre (+ 500 di dicembre)
+const pvNov = C.previsto(bud2, ops0, e0, cfg, "2026-11", "c1", today), pvDic = C.previsto(bud2, ops0, e0, cfg, "2026-12", "c1", today);
+assert.deepStrictEqual([pvNov.residuo, pvDic.residuo, pvDic.residuoMese], [300, 800, 500]);
+assert.strictEqual(pvDic.previsto, 4100 - 800);
+assert.strictEqual(pvDic.previsto, pvNov.previsto - 500); // senza altre operazioni, ogni mese scende del suo budget
+const pvGen = C.previsto(bud2, ops0, e0, cfg, "2027-01", "c1", today);
+assert.strictEqual(pvGen.previsto, pvDic.previsto - 500);
 assert.strictEqual(C.previsto(bud2, ops0, e0, cfg, "2026-10", "c1", today).residuo, 0);
 
 // DA ASSEGNARE: 2000 - 500 (spesa) - 150 (accumulo) - 700 (senza busta)
