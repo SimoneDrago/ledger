@@ -35,15 +35,15 @@
   const state = {
     cfg: DEFAULT_CFG, ops: [], rules: [], scenari: [], scenId: null, catConto: "tot", catPer: null, hide: false, riconc: { c1: [], c2: [] }, simChart: null, simMese: null, simSeg: null, chartData: null, shown: {}, panelPer: null, simConfirm: null, tab: "c1", view: "main", showAnn: false,
     entries: [], annEntries: [], cur: { c1: 0, c2: 0 }, min: { c1: 0, c2: 0 },
-    open: null, userId: null, recovery: false, confirmDel: null, confirmRule: null,
+    open: null, userId: null, confirmDel: null, confirmRule: null,
     editing: null, editingRule: null, ruleDraft: null, linkOp: null,
   };
 
   // ---------- utilità UI ----------
-  const views = ["loading", "login", "recovery", "app"];
+  const views = ["loading", "app"];
   function showView(name) {
     views.forEach((v) => { $("#view-" + v).hidden = v !== name; });
-    document.title = name === "app" ? "Ledger" : "Accesso";
+    document.title = "Ledger · Budget";
   }
   let toastTimer;
   function toast(msg) {
@@ -55,11 +55,11 @@
   const nowIso = () => new Date().toISOString();
 
   // ---------- Supabase ----------
+  // L'accesso (login, recupero password) sta nel cockpit: senza sessione si torna lì.
+  const goCockpit = () => { window.location.replace("../"); };
   const C = window.CONFIG || {};
   if (!C.SUPABASE_URL || /XXXX/.test(C.SUPABASE_URL) || !C.SUPABASE_PUBLISHABLE_KEY || /XXXX/.test(C.SUPABASE_PUBLISHABLE_KEY)) {
-    showView("login");
-    $("#login-msg").textContent = "Configurazione mancante: inserisci URL e chiave Supabase in config.js.";
-    $("#form-login button[type=submit]").disabled = true;
+    goCockpit();
     return;
   }
   const sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_PUBLISHABLE_KEY);
@@ -165,31 +165,14 @@
   sb.auth.onAuthStateChange((event, session) => {
     // differito: evita di chiamare supabase dentro la callback
     setTimeout(() => {
-      if (event === "PASSWORD_RECOVERY") { state.recovery = true; showView("recovery"); return; }
-      if (state.recovery) return;
       if (session) {
         if (state.userId !== session.user.id) { state.userId = session.user.id; start(); }
       } else {
-        state.userId = null; state.ops = []; state.rules = []; state.scenari = []; showView("login");
+        state.userId = null; state.ops = []; state.rules = []; state.scenari = []; goCockpit();
       }
     }, 0);
   });
 
-  $("#form-login").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const msg = $("#login-msg"); msg.textContent = ""; msg.className = "msg";
-    const { error } = await sb.auth.signInWithPassword({ email: $("#login-email").value.trim(), password: $("#login-pass").value });
-    if (error) msg.textContent = "Email o password non corretti.";
-  });
-  $("#form-recovery").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const msg = $("#rec-msg"); msg.textContent = "";
-    const { error } = await sb.auth.updateUser({ password: $("#rec-pass").value });
-    if (error) { msg.textContent = "Password non valida o link scaduto (minimo 8 caratteri)."; return; }
-    state.recovery = false; $("#rec-pass").value = "";
-    const { data } = await sb.auth.getSession();
-    if (data.session) { state.userId = data.session.user.id; start(); } else showView("login");
-  });
   $("#btn-logout").addEventListener("click", () => sb.auth.signOut());
 
   // ---------- privacy (occhio) ----------

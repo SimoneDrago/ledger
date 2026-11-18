@@ -93,6 +93,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
   transition: transform .12s ease, box-shadow .15s ease, background .15s, border-color .15s, filter .15s;
 }
+a.btn { text-decoration: none; }
 .btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--card-2); }
 .btn:active { transform: scale(.97); }
 .btn.primary {

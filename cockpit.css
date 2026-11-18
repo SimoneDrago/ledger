@@ -1,0 +1,21 @@
+/* ============ Cockpit: scelta del servizio (usa il tema di shared/styles.css) ============ */
+.cp-skel { width: min(100%, 420px); height: 160px; }
+.services { display: grid; gap: 14px; margin-top: 8px; }
+@media (min-width: 640px) { .services { grid-template-columns: repeat(2, 1fr); } }
+.service { display: flex; align-items: center; gap: 16px; padding: 20px 18px; color: var(--text); text-decoration: none;
+  transition: transform .15s ease, box-shadow .2s ease, border-color .2s; }
+a.service:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: var(--shadow-lg); }
+a.service:active { transform: scale(.98); }
+a.service:focus-visible { outline: none; box-shadow: var(--ring); }
+.svc-ico { flex: none; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; color: #fff;
+  box-shadow: 0 10px 22px -8px rgba(79, 70, 229, .55), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.svc-budget { background: var(--grad); }
+.svc-planning { background: linear-gradient(135deg, #059669 0%, #0ea5e9 100%); box-shadow: 0 10px 22px -8px rgba(5, 150, 105, .5), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.svc-txt { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.svc-txt strong { font-size: 1.15rem; letter-spacing: -.01em; }
+.svc-txt small { color: var(--muted); font-size: .85rem; }
+.svc-go { font-size: 1.8rem; color: var(--muted); line-height: 1; }
+.service.soon { opacity: .6; }
+.svc-badge { flex: none; font-size: .72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--tag); color: var(--muted); }
+.enter .service { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+.enter .service:nth-child(2) { animation-delay: .08s; }
