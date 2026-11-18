@@ -5,3 +5,5 @@ conti-casa-specifica.md
 *.local.*
 *Zone.Identifier
 README.md
+*.xlsx
+*.xls

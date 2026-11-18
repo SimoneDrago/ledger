@@ -139,15 +139,17 @@
       const cls = ["day"]; if (!c.dentro) cls.push("out"); if (c.weekend) cls.push("we"); if (c.festivo) cls.push("fest"); if (c.iso === oggi) cls.push("today");
       if (i.f !== undefined) cls.push("has-f"); if (i.pm !== undefined) cls.push("has-p");
       const lab = `${c.d} ${P.MESI[Number(c.iso.slice(5, 7)) - 1]}${c.festivo ? ", " + c.festivo : ""}${i.f !== undefined ? ", ferie " + P.fmtOre(i.f) : ""}${i.pm !== undefined ? ", permessi " + P.fmtOre(i.pm) : ""}`;
-      if (mini) return `<button type="button" class="${cls.join(" ")}" data-iso="${c.iso}" ${c.dentro ? "" : "disabled"} aria-label="${esc(lab)}" title="${esc(c.festivo || "")}">${c.dentro ? c.d : ""}</button>`;
-      return `<button type="button" class="${cls.join(" ")}" data-iso="${c.iso}" ${c.dentro ? "" : "disabled"} aria-label="${esc(lab)}" title="${esc(c.festivo || "")}">
+      if (mini) return `<button type="button" class="${cls.join(" ")}" data-iso="${c.iso}"${c.festivo ? ` data-fest="${esc(c.festivo)}"` : ""} ${c.dentro ? "" : "disabled"} aria-label="${esc(lab)}" title="${esc(c.festivo || "")}">${c.dentro ? c.d : ""}</button>`;
+      return `<button type="button" class="${cls.join(" ")}" data-iso="${c.iso}"${c.festivo ? ` data-fest="${esc(c.festivo)}"` : ""} ${c.dentro ? "" : "disabled"} aria-label="${esc(lab)}" title="${esc(c.festivo || "")}">
         <span class="n">${c.d}</span>${c.festivo && c.dentro ? `<span class="fn">${esc(c.festivo)}</span>` : ""}
         ${i.f !== undefined ? `<span class="mk mk-f">${esc(i.fLab)}</span>` : ""}${i.pm !== undefined ? `<span class="mk mk-p">${esc(i.pLab)}</span>` : ""}
       </button>`;
     };
     const head = P.GIORNI.map((g, i) => `<span class="${i >= 5 ? "we" : ""}">${g}</span>`).join("");
     if (state.vista === "mese") {
-      $("#cal-body").innerHTML = `<div class="month"><div class="dow">${head}</div><div class="grid">${P.monthGrid(state.anno, state.mese).flat().map((c) => dayBtn(c, false)).join("")}</div></div>`;
+      const celle = P.monthGrid(state.anno, state.mese).flat(), fest = celle.filter((c) => c.dentro && c.festivo);
+      $("#cal-body").innerHTML = `<div class="month"><div class="dow">${head}</div><div class="grid">${celle.map((c) => dayBtn(c, false)).join("")}</div>`
+        + (fest.length ? `<ul class="fest-list" aria-label="Festività del mese">${fest.map((c) => `<li><span class="dot dot-fest"></span><b>${Number(c.iso.slice(8))}</b> ${esc(c.festivo)}</li>`).join("")}</ul>` : "") + `</div>`;
     } else {
       $("#cal-body").innerHTML = `<div class="year">${P.MESI.map((nome, m) => `<section class="mini${m === state.mese ? " cur" : ""}"><button type="button" class="mini-t" data-goto="${m}">${nome}</button><div class="dow">${P.GIORNI.map((g, i) => `<span class="${i >= 5 ? "we" : ""}">${g.charAt(0)}</span>`).join("")}</div><div class="grid">${P.monthGrid(state.anno, m).flat().map((c) => dayBtn(c, true)).join("")}</div></section>`).join("")}</div>`;
     }
@@ -179,7 +181,10 @@
     const g = e.target.closest("[data-goto]");
     if (g) { state.mese = Number(g.dataset.goto); state.vista = "mese"; render(); return; }
     const d = e.target.closest("button.day[data-iso]");
-    if (d && !d.disabled) paint(d.dataset.iso);
+    if (d && !d.disabled) {
+      if (d.dataset.fest) { toast(`${Number(d.dataset.iso.slice(8))} ${P.MESI[Number(d.dataset.iso.slice(5, 7)) - 1]}: ${d.dataset.fest}`); return; }
+      paint(d.dataset.iso);
+    }
   });
 
   // navigazione
