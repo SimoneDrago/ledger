@@ -8,7 +8,7 @@
   <script>try{var t=localStorage.getItem("conti-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
   <title>Ledger · Planning</title>
   <link rel="stylesheet" href="../shared/styles.css">
-  <link rel="stylesheet" href="planning.css">
+  <link rel="stylesheet" href="planning.css?v=3">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -76,7 +76,7 @@
           </div>
           <div class="tool-opt" id="opt-perm" hidden>
             <button class="btn icon sm" id="p-meno" type="button" aria-label="Meno ore">−</button>
-            <output id="p-ore" aria-live="polite">1 h</output>
+            <input id="p-ore" type="text" inputmode="decimal" autocomplete="off" value="1" aria-label="Ore di permesso (scrivi un numero)"><span class="unit" aria-hidden="true">h</span>
             <button class="btn icon sm" id="p-piu" type="button" aria-label="Più ore">+</button>
           </div>
         </div>
@@ -138,7 +138,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="../shared/config.js"></script>
   <script src="../shared/theme.js"></script>
-  <script src="plan-calc.js"></script>
-  <script src="planning.js"></script>
+  <script src="plan-calc.js?v=3"></script>
+  <script src="planning.js?v=3"></script>
 </body>
 </html>

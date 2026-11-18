@@ -123,7 +123,7 @@
     $$("#tools .tool").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tool === state.tool)));
     $("#opt-ferie").hidden = state.tool !== "ferie"; $("#opt-perm").hidden = state.tool !== "permessi";
     $("#ferie-tipo").value = state.ferieTipo;
-    $("#p-ore").textContent = P.fmtOre(state.permOre);
+    if (document.activeElement !== $("#p-ore")) $("#p-ore").value = P.fmtNum(state.permOre);
     $("#tool-hint").textContent = state.tool === "ferie" ? "Tocca un giorno per segnare le ferie; toccalo di nuovo per toglierle."
       : state.tool === "permessi" ? "Scegli le ore e tocca i giorni. Si possono unire alle ferie dello stesso giorno (mezza giornata)."
       : "Tocca un giorno per cancellare ferie e permessi.";
@@ -200,9 +200,19 @@
   // strumenti
   $("#tools").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) { state.tool = b.dataset.tool; render(); } });
   $("#ferie-tipo").addEventListener("change", (e) => { state.ferieTipo = e.target.value === "mezza" ? "mezza" : "intera"; render(); });
-  const stepOre = (n) => { const og = oreGiorno(persona()); state.permOre = Math.min(og, Math.max(0.5, P.r2(state.permOre + n))); render(); };
-  $("#p-meno").addEventListener("click", () => stepOre(-0.5));
-  $("#p-piu").addEventListener("click", () => stepOre(0.5));
+  // ore di permesso: +/- di una unità alla volta, oppure si scrive il numero (anche con la virgola)
+  const setOre = (n) => { const og = oreGiorno(persona()); state.permOre = Math.min(og, Math.max(0.5, P.r2(n))); render(); };
+  $("#p-meno").addEventListener("click", () => { $("#p-ore").blur(); setOre(state.permOre - 1); });
+  $("#p-piu").addEventListener("click", () => { $("#p-ore").blur(); setOre(state.permOre + 1); });
+  const commitOre = () => {
+    const n = P.parseOre($("#p-ore").value), og = oreGiorno(persona());
+    if (Number.isNaN(n) || n < 0.5 || n > og) toast(`Scrivi un numero di ore tra 0,5 e ${P.fmtNum(og)}.`);
+    else state.permOre = n;
+    $("#p-ore").value = P.fmtNum(state.permOre);
+  };
+  $("#p-ore").addEventListener("change", commitOre);
+  $("#p-ore").addEventListener("focus", (e) => e.target.select());
+  $("#p-ore").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
 
   // persona attiva
   $("#chips").addEventListener("click", (e) => {
