@@ -1,11 +1,9 @@
 // Cockpit: accesso (login e recupero password) e scelta del servizio.
-// I servizi sono pagine separate (budget/, in futuro planning/…): la sessione Supabase è nel localStorage
+// I servizi sono pagine separate (budget/, planning/…): la sessione Supabase è nel localStorage
 // dello stesso sito, quindi si accede una volta sola.
 (() => {
   "use strict";
   const $ = (s) => document.querySelector(s);
-  const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignora */ } };
   const views = ["loading", "login", "recovery", "cockpit"];
   function showView(name) { views.forEach((v) => { $("#view-" + v).hidden = v !== name; }); }
   let toastTimer;
@@ -14,14 +12,8 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2500);
   }
 
-  // ---------- tema chiaro / scuro (stessa scelta del budget: conti-theme) ----------
-  const systemDark = () => !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const currentTheme = () => document.documentElement.dataset.theme || (systemDark() ? "dark" : "light");
-  $("#btn-theme").addEventListener("click", () => {
-    const next = currentTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next; lsSet("conti-theme", next);
-    toast(next === "dark" ? "Tema scuro" : "Tema chiaro");
-  });
+  // ---------- tema chiaro / scuro (stessa scelta del budget) ----------
+  $("#btn-theme").addEventListener("click", () => { toast(window.Theme.toggle() === "dark" ? "Tema scuro" : "Tema chiaro"); });
 
   // ---------- Supabase ----------
   const C = window.CONFIG || {};
@@ -65,6 +57,4 @@
     if (data.session) { userId = data.session.user.id; showCockpit(); } else showView("login");
   });
   $("#btn-logout").addEventListener("click", () => sb.auth.signOut());
-  // il servizio non ancora disponibile non è cliccabile
-  $("#svc-planning").addEventListener("click", () => toast("Il Planning arriva presto."));
 })();

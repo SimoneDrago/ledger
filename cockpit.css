@@ -15,7 +15,5 @@ a.service:focus-visible { outline: none; box-shadow: var(--ring); }
 .svc-txt strong { font-size: 1.15rem; letter-spacing: -.01em; }
 .svc-txt small { color: var(--muted); font-size: .85rem; }
 .svc-go { font-size: 1.8rem; color: var(--muted); line-height: 1; }
-.service.soon { opacity: .6; }
-.svc-badge { flex: none; font-size: .72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--tag); color: var(--muted); }
 .enter .service { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
 .enter .service:nth-child(2) { animation-delay: .08s; }
